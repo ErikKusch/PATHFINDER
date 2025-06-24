@@ -1,7 +1,10 @@
 #' ####################################################################### #
 #' PROJECT: [PATHFINDER - WP3]
 #' CONTENTS:
-#'  - Match GHCN data with CHELSA data
+#'  - CHELSA data
+#'      + Download
+#'      + Crop
+#'  - [ToDo:] - match with ESA BIOMASS data, make data frames of LAT, LON, TEMP AVG, TEMP Range, TEMP Max, TEMP Min, ELEVATION (obtain separate DEM or do we already have one?), Year, Month
 #'  DEPENDENCIES:
 #'  - None
 #' AUTHOR: [Erik Kusch]
@@ -24,8 +27,7 @@ package_vec <- c(
 sapply(package_vec, install.load.package)
 
 ### NON-CRAN PACKAGES ----
-if ("ClimHub" %in% rownames(installed.packages()) == FALSE) { # KrigR check
-    Sys.setenv(R_REMOTES_NO_ERRORS_FROM_WARNINGS = "true")
+if ("ClimHub" %in% rownames(installed.packages()) == FALSE) { # ClimHub check
     devtools::install_github("ErikKusch/ClimHub")
 }
 library(ClimHub)
@@ -34,7 +36,7 @@ package_vec <- c("ClimHub", package_vec)
 ## Directories ------------------------------------------------------------
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
-Dir.CHELSA <- Dir.Base
+Dir.CHELSA <- "/div/no-backup-nac/PATHFINDER/CHELSA"
 
 # DATA ====================================================================
 Chelsa_vars <- c("tasmax", "tasmin", "tas")
