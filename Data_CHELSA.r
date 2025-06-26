@@ -37,6 +37,7 @@ package_vec <- c("ClimHub", package_vec)
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
 Dir.CHELSA <- "/div/no-backup-nac/PATHFINDER/CHELSA"
+if(!dir.exists(Dir.CHELSA)){dir.create(Dir.CHELSA)}
 
 # DATA ====================================================================
 Chelsa_vars <- c("tasmax", "tasmin", "tas")
@@ -51,11 +52,10 @@ CHELSA_ls <- lapply(Chelsa_vars, FUN = function(VarIter) {
 
     FCheck <- WriteRead.FileCheck(FName = FileName, Dir = Dir.CHELSA, loadFun = terra::rast, load = TRUE, verbose = TRUE)
     if (!is.null(FCheck)) {
-        FCheck <- WriteRead.NC(NC = FCheck, FName = file.path(Dir.CHELSA, FileName), Attrs = Meta_vec)
+        FCheck <- ClimHub:::WriteRead.NC(NC = FCheck, FName = file.path(Dir.CHELSA, FileName), Attrs = Meta_vec)
         return(FCheck)
-    }
-
-    # Generate sequence of monthly dates
+    }else{
+        # Generate sequence of monthly dates
     dates <- seq(from = as.Date("2000-01-01"), to = as.Date("2019-12-01"), by = "month")
 
     # Format as "MM_YYYY"
@@ -64,20 +64,22 @@ CHELSA_ls <- lapply(Chelsa_vars, FUN = function(VarIter) {
     URLS <- paste0("https://os.zhdk.cloud.switch.ch/chelsav2/GLOBAL/monthly/", VarIter, "/CHELSA_", VarIter, "_", month_year_vec, "_V.2.1.tif")
     FNames <- paste0("CHELSA_", VarIter, "_", month_year_vec, "_V.2.1.tif")
 
-    FilestoLoad <- ClimHub:::Helper.DirectDownload(URLS = URLS, Names = FNames, Cores = 4, Dir = Dir.CHELSA)
+    FilestoLoad <- ClimHub:::Helper.DirectDownload(URLS = URLS, Names = FNames, Cores = 12, Dir = Dir.CHELSA)
     CHELSA_rast <- ClimHub:::Helper.LoadFiles(FilestoLoad)
 
     CHELSA_rast <- Spatial.CropMask(CHELSA_rast, terra::ext(c(-10, 30, 35, 70)))
+    time(CHELSA_rast) <- dates
 
-    CHELSA_rast <- WriteRead.NC(
+    CHELSA_rast <- ClimHub:::WriteRead.NC(
         NC = CHELSA_rast, FName = file.path(Dir.CHELSA, FileName),
         Variable = VarIter,
         LongVar = VarIter,
-        Unit = unique(unit(CHELSA_rast)),
+        Unit = unique(terra::units(CHELSA_rast)),
         Attrs = Meta_vec, Write = TRUE, Compression = 9
     )
 
-    unlink(file.path(Dir, FNames))
+    unlink(file.path(Dir.CHELSA, FNames))
 
     CHELSA_rast
+    }
 })
