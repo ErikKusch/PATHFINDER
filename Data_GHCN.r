@@ -68,6 +68,20 @@ Long_ls <- pblapply(Fs, cl = 12, FUN = function(FIter){
     df$TMIN <- ifelse(grepl(paste(bad_flags, collapse = "|"), df$TMIN_ATTRIBUTES), NA, df$TMIN)
     df$TAVG <- ifelse(grepl(paste(bad_flags, collapse = "|"), df$TAVG_ATTRIBUTES), NA, df$TAVG)
 
+    # remove non-data flags (all 9s)
+    all_nines <- function(s) {
+        digits <- unlist(regmatches(s, gregexpr("\\d", s)))
+        length(digits) > 0 && all(digits == "9")
+    }
+    df$TMAX <- ifelse(all_nines(df$TMAX), NA, df$TMAX)
+    df$TMIN <- ifelse(all_nines(df$TMIN), NA, df$TMIN)
+    df$TAVG <- ifelse(all_nines(df$TAVG), NA, df$TAVG)
+
+    # reformat to sensible degree C (data is stored in tens of degrees C)
+    df$TMAX <- df$TMAX/10
+    df$TMIN <- df$TMIN/10
+    df$TAVG <- df$TAVG/10
+
     # Select and reshape
     df %>%
         select(STATION, DATE, LATITUDE, LONGITUDE, ELEVATION, TMAX, TMIN, TAVG) %>%
@@ -82,7 +96,8 @@ Long_ls <- pblapply(Fs, cl = 12, FUN = function(FIter){
 ## Bind data, clean and export --------------------------------------------
 Stations_df <- do.call(rbind, Long_ls)
 Stations_df <- Stations_df[Stations_df$LONGITUDE >= -10 & Stations_df$LONGITUDE <= 30 & Stations_df$LATITUDE >= 35 & Stations_df$LATITUDE <= 70, ] # limit to bounding box that all spatial data comes in
-write.csv(Stations_df, file = "GHCN_2000-2024.csv")
+head(Stations_df[Stations_df$VARIABLE != "ELEVATION", ])
+write.csv(Stations_df, file = "GHCN_2000-2024_CLEANED.csv")
 
 ## Make monthly data summaries and export ---------------------------------
 Stations_monthly_summary <- Stations_df %>%
@@ -96,10 +111,10 @@ summarise(
     sd = sd(VALUE, na.rm = TRUE),
     min = min(VALUE, na.rm = TRUE),
     max = max(VALUE, na.rm = TRUE),
-    range = max - min,
+    # range = max - min,
     median = median(VALUE, na.rm = TRUE),
     .groups = "drop"
 )
-head(Stations_monthly_summary)
+head(Stations_monthly_summary[Stations_monthly_summary$VARIABLE != "ELEVATION", ])
 
 write.csv(Stations_monthly_summary, "GHCN_2000-2024_MONTHLY.csv")
