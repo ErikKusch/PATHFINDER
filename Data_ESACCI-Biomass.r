@@ -56,7 +56,7 @@ if (!is.null(FCheck)) {
 
     ## Cropping ---------------------------------------------------------------
     ESA_rast <- Spatial.CropMask(ESA_rast, terra::ext(c(-10, 30, 35, 70)))
-    time(ESA_rast) <- dates
+    # time(ESA_rast) <- dates
 
     ## Saving -----------------------------------------------------------------
     ESA_rast <- ClimHub:::WriteRead.NC(
