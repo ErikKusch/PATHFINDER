@@ -39,7 +39,7 @@ Dir.ESA <- "/div/no-backup-nac/PATHFINDER/ESACCI-BIOMASS"
 if(!dir.exists(Dir.ESA)){dir.create(Dir.ESA)}
 
 # DATA ====================================================================
-## Download ---------------------------------------------------------------
+## 100m -------------------------------------------------------------------
 Meta_vec <- c(DOI = "doi: 10.5285/95913ffb6467447ca72c4e9d8cf30501", CITATION = "Santoro, M.; Cartus, O. (2025): ESA Biomass Climate Change Initiative (Biomass_cci): Global datasets of forest above-ground biomass for the years 2007, 2010, 2015, 2016, 2017, 2018, 2019, 2020, 2021 and 2022, v6.0. NERC EDS Centre for Environmental Data Analysis, 17 April 2025.", Project = "PATHFINDER", Handler = "Erik Kusch")
 
 FileName <- paste0("ESA-BIOMASS_2007-2022.nc")
@@ -54,11 +54,44 @@ if (!is.null(FCheck)) {
     FilestoLoad <- ClimHub:::Helper.DirectDownload(URLS = URLS, Names = FNames, Cores = 12, Dir = Dir.ESA)
     ESA_rast <- ClimHub:::Helper.LoadFiles(FilestoLoad)
 
-    ## Cropping ---------------------------------------------------------------
+    ### Cropping --------------------------------------------------------------
     ESA_rast <- Spatial.CropMask(ESA_rast, terra::ext(c(-10, 30, 35, 70)))
     # time(ESA_rast) <- dates
 
-    ## Saving -----------------------------------------------------------------
+    ### Saving ----------------------------------------------------------------
+    ESA_rast <- ClimHub:::WriteRead.NC(
+        NC = ESA_rast, FName = file.path(Dir.ESA, FileName),
+        Variable = "AGB",
+        LongVar = "Above-Ground Biomass",
+        Unit = "tons/ha",
+        Attrs = Meta_vec, Write = TRUE, Compression = 9
+    )
+
+    unlink(file.path(Dir.ESA, FNames))
+    }
+
+ESA_rast
+
+## 1000m ------------------------------------------------------------------
+Meta_vec <- c(DOI = "doi: 10.5285/95913ffb6467447ca72c4e9d8cf30501", CITATION = "Santoro, M.; Cartus, O. (2025): ESA Biomass Climate Change Initiative (Biomass_cci): Global datasets of forest above-ground biomass for the years 2007, 2010, 2015, 2016, 2017, 2018, 2019, 2020, 2021 and 2022, v6.0. NERC EDS Centre for Environmental Data Analysis, 17 April 2025.", Project = "PATHFINDER", Handler = "Erik Kusch")
+
+FileName <- paste0("ESA-BIOMASS_1km_2007-2022.nc")
+FCheck <- WriteRead.FileCheck(FName = FileName, Dir = Dir.ESA, loadFun = terra::rast, load = TRUE, verbose = TRUE)
+
+if (!is.null(FCheck)) {
+    ESA_rast <- ClimHub:::WriteRead.NC(NC = FCheck, FName = file.path(Dir.ESA, FileName), Attrs = Meta_vec)
+}else{
+    URLS <- paste0("https://dap.ceda.ac.uk/neodc/esacci/biomass/data/agb/maps/v6.0/netcdf/ESACCI-BIOMASS-L4-AGB-MERGED-1000m-fv6.0.nc?download=1")
+    FNames <- paste0("ESA_TEMP-", FileName)
+
+    FilestoLoad <- ClimHub:::Helper.DirectDownload(URLS = URLS, Names = FNames, Cores = 1, Dir = Dir.ESA)
+    ESA_rast <- ClimHub:::Helper.LoadFiles(FilestoLoad)
+
+    ### Cropping --------------------------------------------------------------
+    ESA_rast <- Spatial.CropMask(ESA_rast, terra::ext(c(-10, 30, 35, 70)))
+    # time(ESA_rast) <- dates
+
+    ### Saving ----------------------------------------------------------------
     ESA_rast <- ClimHub:::WriteRead.NC(
         NC = ESA_rast, FName = file.path(Dir.ESA, FileName),
         Variable = "AGB",
