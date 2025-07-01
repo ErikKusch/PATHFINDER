@@ -29,11 +29,11 @@ sapply(package_vec, install.load.package)
 ## Directories ------------------------------------------------------------
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
-Dir.GHCN <- "/div/no-backup-nac/PATHFINDER/GHCN/ghcnd"
+Dir.GHCN <- "/div/no-backup-nac/PATHFINDER/GHCN"
 
 # DATA ====================================================================
 ## Files ------------------------------------------------------------------
-Fs <- list.files(Dir.GHCN, pattern = ".csv", full.names = TRUE)
+Fs <- list.files(file.path(Dir.GHCN, "/ghcn", pattern = ".csv", full.names = TRUE)
 
 ## Read data and reformat -------------------------------------------------
 # Define the quality failure letters to check for according to https://www.ncei.noaa.gov/pub/data/cdo/documentation/GHCND_documentation.pdf
@@ -128,8 +128,8 @@ saveRDS(Measurements_df, file = "GHCN_Measurements_2000-2024_CLEANED.rds")
 
 Stations_df <- do.call(rbind, lapply(Long_ls[!(unlist(lapply(Long_ls, class)) == "logical")], "[[", 2))
 
-write.csv(Stations_df, file = "GHCN_Stations_2000-2024_CLEANED.csv")
-saveRDS(Stations_df, file = "GHCN_Stations_2000-2024_CLEANED.rds")
+write.csv(Stations_df, file = file.path(Dir.GHCN, "GHCN_Stations_2000-2024_CLEANED.csv"))
+saveRDS(Stations_df, file = file.path(Dir.GHCN, "GHCN_Stations_2000-2024_CLEANED.rds"))
 
 ## Make monthly data summaries and export ---------------------------------
 Stations_monthly_summary <- Measurements_df %>%
@@ -149,5 +149,5 @@ summarise(
 )
 head(Stations_monthly_summary[Stations_monthly_summary$VARIABLE != "ELEVATION", ])
 
-write.csv(Stations_monthly_summary, "GHCN_2000-2024_MONTHLY.csv")
-saveRDS(Stations_monthly_summary, "GHCN_2000-2024_MONTHLY.rds")
+write.csv(Stations_monthly_summary, file.path(Dir.GHCN, "GHCN_2000-2024_MONTHLY.csv"))
+saveRDS(Stations_monthly_summary, file.path(Dir.GHCN, "GHCN_2000-2024_MONTHLY.rds"))
