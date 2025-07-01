@@ -36,13 +36,14 @@ package_vec <- c("ClimHub", package_vec)
 ## Directories ------------------------------------------------------------
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
+Dir.GHCN <- "/div/no-backup-nac/PATHFINDER/GHCN"
 Dir.ESA <- "/div/no-backup-nac/PATHFINDER/ESACCI-BIOMASS"
 
 # DATA ====================================================================
 ## Loading ----------------------------------------------------------------
 ESA_agb_rast <- rast(file.path(Dir.ESA, "ESA-BIOMASS_1km_2015-2022.nc"))
-GHCN_df <- readRDS("GHCN_2000-2024_MONTHLY.rds")
-Stations_df <- readRDS("GHCN_Stations_2000-2024_CLEANED.rds")
+GHCN_df <- readRDS(file.path(Dir.GHCN, "GHCN_2000-2024_MONTHLY.rds"))
+Stations_df <- readRDS(file.path(Dir.GHCN, "GHCN_Stations_2000-2024_CLEANED.rds"))
 
 ## Combining --------------------------------------------------------------
 Extract_ls <- pblapply(1:nrow(GHCN_df), cl = 36, FUN = function(Iter){
@@ -65,5 +66,5 @@ Extract_ls <- pblapply(1:nrow(GHCN_df), cl = 36, FUN = function(Iter){
 })
 
 StationData_df <- do.call(rbind, Extract_ls)
-write.csv(apply(StationData_df, 2, as.character), "GHCN_and_AGB_MONTHLY.csv")
-saveRDS(StationData_df, "GHCN_and_AGB_MONTHLY.rds")
+write.csv(apply(StationData_df, 2, as.character), "StationLevelData.csv")
+saveRDS(StationData_df, "StationLevelData.rds")
