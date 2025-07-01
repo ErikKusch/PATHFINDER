@@ -4,7 +4,6 @@
 #'  - CHELSA data
 #'      + Download
 #'      + Crop
-#'  - [ToDo:] - match with ESA BIOMASS data, make data frames of LAT, LON, TEMP AVG, TEMP Range, TEMP Max, TEMP Min, ELEVATION (obtain separate DEM or do we already have one?), Year, Month
 #'  DEPENDENCIES:
 #'  - None
 #' AUTHOR: [Erik Kusch]
