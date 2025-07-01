@@ -123,8 +123,8 @@ Measurements_df <- Measurements_df[Measurements_df$LONGITUDE >= -10 & Measuremen
 
 head(Measurements_df[Measurements_df$VARIABLE != "ELEVATION", ])
 
-write.csv(Measurements_df, file = "GHCN_Measurements_2000-2024_CLEANED.csv")
-saveRDS(Measurements_df, file = "GHCN_Measurements_2000-2024_CLEANED.rds")
+write.csv(Measurements_df, file = file.path(Dir.GHCN, "GHCN_Measurements_2000-2024_CLEANED.csv"))
+saveRDS(Measurements_df, file = file.path(Dir.GHCN, "GHCN_Measurements_2000-2024_CLEANED.rds"))
 
 Stations_df <- do.call(rbind, lapply(Long_ls[!(unlist(lapply(Long_ls, class)) == "logical")], "[[", 2))
 
