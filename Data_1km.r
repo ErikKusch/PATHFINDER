@@ -6,6 +6,7 @@
 #'  - Must have run:
 #'      + Data_ESACCI-Biomass.r 
 #'      + Data_CHELSA.r
+#'      + Data_DEM.r
 #' AUTHOR: [Erik Kusch]
 #' ####################################################################### #
 
@@ -38,10 +39,12 @@ package_vec <- c("ClimHub", package_vec)
 Dir.Base <- getwd() # identifying the current directory
 Dir.ESA <- "/div/no-backup-nac/PATHFINDER/ESACCI-BIOMASS"
 Dir.CHELSA <- "/div/no-backup-nac/PATHFINDER/CHELSA"
+Dir.DEM <- "/div/no-backup-nac/PATHFINDER/EU-DEM"
 
 # DATA ====================================================================
 ## Loading ----------------------------------------------------------------
 ESA_agb_rast <- rast(file.path(Dir.ESA, "ESA-BIOMASS_1km_2015-2022.nc"))[[1:5]] # don't need to keep the SD layers, and also cannot use 2020-onwards data as that is not matched by CHELSA
+GISCO_DEM_rast <- rast(file.path(Dir.DEM, "GISCO_DEM.nc"))
 ### minor dicrepancies between the "1km resolutions" of the two data sets necessitate resampling from finer to coarser, also can shave off all data predating 2015
 CHELSA_TAVG_rast <- resample(rast(file.path(Dir.CHELSA, "CHELSA_tas2000-2019_MONTHLY.nc"))[[(12*15+1):240]], ESA_agb_rast)
 CHELSA_TMIN_rast <- resample(rast(file.path(Dir.CHELSA, "CHELSA_tasmin2000-2019_MONTHLY.nc"))[[(12*15+1):240]], ESA_agb_rast)
@@ -63,6 +66,7 @@ Extract_ls <- pblapply(1:nlyr(CHELSA_TAVG_rast), FUN = function(Iter){
     Base_df <- Base_df[,c(1:3,5, 4)]
     Base_df$min <- as.data.frame(TMIN_Iter)[,1]
     Base_df$max <- as.data.frame(TMAX_Iter)[,1]
+    Base_df$ELEVATION <- as.data.frame(GISCO_DEM_rast)[,1]
 
     ### add AGB data
     ESALyr <- which(substr(time(ESA_agb_rast), 1, 4) == substr(Base_df$YEAR_MONTH[1], 1, 4))
