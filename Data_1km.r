@@ -64,9 +64,9 @@ Extract_ls <- pblapply(1:nlyr(CHELSA_TAVG_rast), FUN = function(Iter){
     colnames(Base_df) <- c("CELL", "LONGITUDE", "LATITUDE", "mean")
     Base_df$YEAR_MONTH <- substr(time(TAVG_Iter), 1, 7)
     Base_df <- Base_df[,c(1:3,5, 4)]
-    Base_df$min <- as.data.frame(TMIN_Iter)[,1]
-    Base_df$max <- as.data.frame(TMAX_Iter)[,1]
-    Base_df$ELEVATION <- as.data.frame(GISCO_DEM_rast)[,1]
+    Base_df$min <- as.data.frame(TMIN_Iter, na.rm = FALSE)[,1]
+    Base_df$max <- as.data.frame(TMAX_Iter, na.rm = FALSE)[,1]
+    Base_df$ELEVATION <- as.data.frame(GISCO_DEM_rast, na.rm = FALSE)[,1]
 
     ### add AGB data
     ESALyr <- which(substr(time(ESA_agb_rast), 1, 4) == substr(Base_df$YEAR_MONTH[1], 1, 4))
