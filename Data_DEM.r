@@ -83,8 +83,10 @@ if (!is.null(FCheck)) {
             Attrs = Meta_vec, Write = TRUE, Compression = 9
         )
 
-stop("Remove intermediate files")
-        unlink(file.path(Dir.DEM, FNames))
+        unlink(c(
+            file.path(Dir.DEM, "eudem_dem_4258_europe.tif"), 
+            file.path(Dir.DEM, "EU_DEM_mosaic_5deg.ZIP"))
+            )
 
-        CHELSA_rast
+        EUDEM_rast3
     }
