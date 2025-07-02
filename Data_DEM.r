@@ -45,7 +45,7 @@ if(!dir.exists(Dir.DEM)){dir.create(Dir.DEM)}
 ESA_agb_rast <- rast(file.path(Dir.ESA, "ESA-BIOMASS_1km_2015-2022.nc"))
 
 ## Download --------------------------------------------------------
-FileName <- paste0("GISCO_DEM.nc")
+FileName <- "GISCO_DEM.nc"
 Meta_vec <- c(DOI = "", CITATION = "European Environment Agency. EU-DEM v1.1. 2021. Dataset. European Environment Agency, https://sdi.eea.europa.eu/catalogue/srv/eng/catalog.search#/metadata/d08852bc-7b5f-4835-a776-08362e2fbf4b.", Project = "PATHFINDER", Handler = "Erik Kusch")
 
 FCheck <- WriteRead.FileCheck(FName = FileName, Dir = Dir.DEM, loadFun = terra::rast, load = TRUE, verbose = TRUE)
