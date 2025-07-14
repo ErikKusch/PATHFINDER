@@ -38,6 +38,8 @@ package_vec <- c("ClimHub", package_vec)
 Dir.Base <- getwd() # identifying the current directory
 Dir.GHCN <- "/div/no-backup-nac/PATHFINDER/GHCN"
 Dir.ESA <- "/div/no-backup-nac/PATHFINDER/ESACCI-BIOMASS"
+Dir.EmulatorData <- "/div/no-backup-nac/PATHFINDER/EMULATOR-DATA"
+if(!dir.exists(Dir.EmulatorData)){dir.create(Dir.EmulatorData)}
 
 # DATA ====================================================================
 ## Loading ----------------------------------------------------------------
@@ -46,9 +48,7 @@ GHCN_df <- readRDS(file.path(Dir.GHCN, "GHCN_2000-2024_MONTHLY.rds"))
 Stations_df <- readRDS(file.path(Dir.GHCN, "GHCN_Stations_2000-2024_CLEANED.rds"))
 
 ## Combining --------------------------------------------------------------
-Extract_ls <- pblapply(1:nrow(GHCN_df), 
-# cl = 36, 
-FUN = function(Iter){
+Extract_ls <- pblapply(1:nrow(GHCN_df), cl = 36, FUN = function(Iter){
     # print(Iter)
     Iter_df <- GHCN_df[Iter, ]
     Iter_df <- cbind(Stations_df[which(Stations_df$STATION == Iter_df$STATION), ], Iter_df[ , -1])
@@ -69,6 +69,5 @@ FUN = function(Iter){
 
 StationData_df <- do.call(rbind, Extract_ls)
 head(StationData_df)
-stop("Check for errors and combine into dataframe")
 # write.csv(apply(StationData_df, 2, as.character), "Data_StationLevel.csv")
-saveRDS(StationData_df, "Data_StationLevel.rds")
+saveRDS(StationData_df, file.path(Dir.EmulatorData, "Data_StationLevel.rds"))
