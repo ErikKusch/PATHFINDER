@@ -33,7 +33,7 @@ Dir.GHCN <- "/div/no-backup-nac/PATHFINDER/GHCN"
 
 # DATA ====================================================================
 ## Files ------------------------------------------------------------------
-Fs <- list.files(file.path(Dir.GHCN, "/ghcn", pattern = ".csv", full.names = TRUE)
+Fs <- list.files(file.path(Dir.GHCN, "ghcnd"), pattern = ".csv", full.names = TRUE)
 
 ## Read data and reformat -------------------------------------------------
 # Define the quality failure letters to check for according to https://www.ncei.noaa.gov/pub/data/cdo/documentation/GHCND_documentation.pdf
