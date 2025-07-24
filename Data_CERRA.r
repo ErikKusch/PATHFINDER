@@ -37,7 +37,7 @@ source("PersonalSettings.R")
 ## Directories ------------------------------------------------------------
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
-Dir.CERRA <- getwd() # "/div/no-backup-nac/PATHFINDER/CERRA"
+Dir.CERRA <- "/div/no-backup-nac/PATHFINDER/CERRA"
 if (!dir.exists(Dir.CERRA)) {
     dir.create(Dir.CERRA)
 }
