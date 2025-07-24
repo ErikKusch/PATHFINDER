@@ -30,19 +30,37 @@ sapply(package_vec, install.load.package)
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
 Dir.GHCN <- "/div/no-backup-nac/PATHFINDER/GHCN"
+Dir.GHCN.Raw <- file.path(Dir.GHCN, "RAWData")
 
 # DATA ====================================================================
+# ## Downloading Data -------------------------------------------------------
+# stop("check tha this works")
+# if (!dir.exists(Dir.GHCN.Raw)) {
+#     dir.create(Dir.GHCN.Raw)
+#     ### download ------
+#     options(timeout = 3600)
+#     download.file(
+#             url = "https://www.ncei.noaa.gov/data/global-historical-climatology-network-daily/archive/daily-summaries-latest.tar.gz", 
+#             destfile = file.path(Dir.GHCN.Raw, paste0(Sys.Date(), ".tar.gz")), 
+#             timeout = 3600
+#             )
+
+#         ### unzip ------
+#         unzip(file.path(Dir.GHCN.Raw, paste0(Sys.Date(), ".tar.gz")), exdir = Dir.GHCN.Raw)
+#     }
+
+
 ## Files ------------------------------------------------------------------
 Fs <- list.files(file.path(Dir.GHCN, "ghcnd"), pattern = ".csv", full.names = TRUE)
 
 ## Read data and reformat -------------------------------------------------
-# Define the quality failure letters to check for according to https://www.ncei.noaa.gov/pub/data/cdo/documentation/GHCND_documentation.pdf
+# Define the quality failure letters to check for according to https://www.ncei.noaa.gov/pub/data/cdo/documentation/GHCND_documentation.pdf -> Table 2 (Quality Flag/Attribute)
 bad_flags <- c("D", "G", "I", "K", "L", "M", "N", "O", "R", "S", "T", "W", "X", "Z")
 
-Long_ls <- pblapply(Fs, cl = 36, 
-FUN = function(FIter){
+Long_ls <- pblapply(Fs, cl = 36, FUN = function(FIter){
     # FIter <- Fs[1]
     # print(FIter)
+
     df <- read.csv(FIter)
 
     # Filter to years 2000–2024
@@ -78,10 +96,21 @@ FUN = function(FIter){
     df$TMIN <- ifelse(sapply(df$TMIN, all_nines), NA, df$TMIN)
     df$TAVG <- ifelse(sapply(df$TAVG, all_nines), NA, df$TAVG)
 
-    # Invalidate TMAX/TMIN/TAVG if they contain any "bad" flags
-    df$TMAX <- ifelse(grepl(paste(bad_flags, collapse = "|"), df$TMAX_ATTRIBUTES), NA, df$TMAX)
-    df$TMIN <- ifelse(grepl(paste(bad_flags, collapse = "|"), df$TMIN_ATTRIBUTES), NA, df$TMIN)
-    df$TAVG <- ifelse(grepl(paste(bad_flags, collapse = "|"), df$TAVG_ATTRIBUTES), NA, df$TAVG)
+    # Invalidate TMAX/TMIN/TAVG if they contain any "bad" flags, only between two commas of original string
+
+    df$TMAX <- ifelse(grepl(paste(bad_flags, collapse = "|"), 
+    sapply(strsplit(df$TMAX_ATTRIBUTES, ","), function(x) {
+        if (length(x) >= 2) x[2] else ""  # return empty string if no middle element
+        })
+        ), NA, df$TMAX)
+    df$TMIN <- ifelse(grepl(paste(bad_flags, collapse = "|"), 
+    sapply(strsplit(df$TMIN_ATTRIBUTES, ","), function(x) {
+        if (length(x) >= 2) x[2] else ""  # return empty string if no middle element
+        })), NA, df$TMIN)
+    df$TAVG <- ifelse(grepl(paste(bad_flags, collapse = "|"), 
+    sapply(strsplit(df$TAVG_ATTRIBUTES, ","), function(x) {
+        if (length(x) >= 2) x[2] else ""  # return empty string if no middle element
+        })), NA, df$TAVG)
 
     # reformat to sensible degree C (data is stored in tens of degrees C)
     df$TMAX <- df$TMAX/10
