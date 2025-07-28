@@ -43,12 +43,11 @@ if (!dir.exists(Dir.CERRA)) {
 }
 
 # DATA ====================================================================
+Meta_vec <- c(DOI = "10.24381/cds.622a565a", CITATION = "Schimanke S., Ridal M., Le Moigne P., Berggren L., Undén P., Randriamampianina R., Andrea U., Bazile E., Bertelsen A., Brousseau P., Dahlgren P., Edvinsson L., El Said A., Glinton M., Hopsch S., Isaksson L., Mladek R., Olsson E., Verrelle A., Wang Z.Q., (2021): CERRA sub-daily regional reanalysis data for Europe on single levels from 1984 to present. Copernicus Climate Change Service (C3S) Climate Data Store (CDS), DOI: 10.24381/cds.622a565a.", Project = "PATHFINDER", Handler = "Erik Kusch")
+
 CERRA_ls <- lapply(2000:2023, FUN = function(YearIter) {
     message(YearIter)
-
     FileName <- paste0("CERRA_max_", YearIter, ".nc")
-
-    Meta_vec <- c(DOI = "10.24381/cds.622a565a", CITATION = "Schimanke S., Ridal M., Le Moigne P., Berggren L., Undén P., Randriamampianina R., Andrea U., Bazile E., Bertelsen A., Brousseau P., Dahlgren P., Edvinsson L., El Said A., Glinton M., Hopsch S., Isaksson L., Mladek R., Olsson E., Verrelle A., Wang Z.Q., (2021): CERRA sub-daily regional reanalysis data for Europe on single levels from 1984 to present. Copernicus Climate Change Service (C3S) Climate Data Store (CDS), DOI: 10.24381/cds.622a565a.", Project = "PATHFINDER", Handler = "Erik Kusch")
 
     if (file.exists(file.path(Dir.CERRA, FileName))) {
         print("Already prepared")
@@ -112,4 +111,17 @@ CERRA_ls <- lapply(2000:2023, FUN = function(YearIter) {
 
         CERRA_Year3_ls
     }
+})
+
+CERRA_rasts_ls <- lapply(names(CERRA_ls[[1]]), FUN = function(x) {
+    CERRA_iter <- do.call(c, lapply(CERRA_ls, "[[", x))
+    ClimHub:::WriteRead.NC(
+        NC = CERRA_iter,
+        FName = file.path(Dir.CERRA, paste0("CERRA_", x, ".nc")),
+        Variable = "2m temperature",
+        LongVar = paste(x, "monthly air temperature"),
+        Unit = "C",
+        Attrs = Meta_vec, Write = TRUE, Compression = 9
+    )
+    unlink(terra::sources(CERRA_iter))
 })
