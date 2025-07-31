@@ -7,6 +7,8 @@
 #'      + Data_ESACCI-Biomass.r
 #'      + Data_CHELSA.r
 #'      + Data_DEM.r
+#'  - Must be present:
+#'      + EmulatorReadying.r
 #' AUTHOR: [Erik Kusch]
 #' ####################################################################### #
 
@@ -44,6 +46,9 @@ Dir.EmulatorData <- "/div/no-backup-nac/PATHFINDER/EMULATOR-DATA"
 if (!dir.exists(Dir.EmulatorData)) {
     dir.create(Dir.EmulatorData)
 }
+
+## Functionality ------------------------------------------------------------
+source("EmulatorReadying.r")
 
 # DATA ====================================================================
 ## Loading ----------------------------------------------------------------
@@ -95,5 +100,8 @@ Data_1km_df <- do.call(rbind, Extract_ls)
 Data_1km_df$mean <- Data_1km_df$mean / 10 - 272.15
 Data_1km_df$min <- Data_1km_df$min / 10 - 272.15
 Data_1km_df$max <- Data_1km_df$max / 10 - 272.15
-# write.csv(Data_1km_df, "Data_1km_df.csv")
+
+## Adding Derived Information ---------------------------------------------
+Data_1km_df <- EmulatorReadying(Data_1km_df)
+write.csv(Data_1km_df, "Data_1km_df.csv")
 saveRDS(Data_1km_df, file.path(Dir.EmulatorData, "Data_1km_df.rds"))

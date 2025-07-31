@@ -4,8 +4,10 @@
 #'  - Combining GHCN Station-Level data with ESAC
 #'  DEPENDENCIES:
 #'  - Must have run:
-#'      + Data_ESACCI-Biomass.r 
+#'      + Data_ESACCI-Biomass.r
 #'      + Data_GHCN.r
+#'  - Must be present:
+#'      + EmulatorReadying.r
 #' AUTHOR: [Erik Kusch]
 #' ####################################################################### #
 
@@ -41,6 +43,9 @@ Dir.ESA <- "/div/no-backup-nac/PATHFINDER/ESACCI-BIOMASS"
 Dir.EmulatorData <- "/div/no-backup-nac/PATHFINDER/EMULATOR-DATA"
 if(!dir.exists(Dir.EmulatorData)){dir.create(Dir.EmulatorData)}
 
+## Functionality ------------------------------------------------------------
+source("EmulatorReadying.r")
+
 # DATA ====================================================================
 ## Loading ----------------------------------------------------------------
 ESA_agb_rast <- rast(file.path(Dir.ESA, "ESA-BIOMASS_1km_2015-2022.nc"))
@@ -66,8 +71,9 @@ Extract_ls <- pblapply(1:nrow(GHCN_df), cl = 36, FUN = function(Iter){
     Iter_df$AGB_ESA <- ESAVal
     Iter_df
 })
-
 StationData_df <- do.call(rbind, Extract_ls)
-head(StationData_df)
-# write.csv(apply(StationData_df, 2, as.character), "Data_StationLevel.csv")
+
+## Adding Derived Information ---------------------------------------------
+StationData_df <- EmulatorReadying(StationData_df)
+write.csv(apply(StationData_df, 2, as.character), "Data_StationLevel.csv")
 saveRDS(StationData_df, file.path(Dir.EmulatorData, "Data_StationLevel.rds"))
