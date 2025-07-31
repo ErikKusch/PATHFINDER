@@ -1,14 +1,14 @@
-# ####################################################################### #
-# PROJECT: [PATHFINDER - WP3]
-# CONTENTS:
-#  - CERRA data
-#      + Download
-#      + Temporal Aggregation
-#      + Reprojection
-#  DEPENDENCIES:
-#  - CDS API Credentials in a file called PersonalSettings.R
-# AUTHOR: [Erik Kusch]
-# ####################################################################### #
+#' ####################################################################### #
+#' PROJECT: [PATHFINDER - WP3]
+#' CONTENTS:
+#'  - CERRA data
+#'      + Download
+#'      + Temporal Aggregation
+#'      + Reprojection
+#'  DEPENDENCIES:
+#'  - CDS API Credentials in a file called PersonalSettings.R
+#' AUTHOR: [Erik Kusch]
+#' ####################################################################### #
 
 # PREAMBLE ================================================================
 rm(list = ls()) # some may not like it, but it helps my workflow
@@ -45,7 +45,7 @@ if (!dir.exists(Dir.CERRA)) {
 # DATA ====================================================================
 Meta_vec <- c(DOI = "10.24381/cds.622a565a", CITATION = "Schimanke S., Ridal M., Le Moigne P., Berggren L., Undén P., Randriamampianina R., Andrea U., Bazile E., Bertelsen A., Brousseau P., Dahlgren P., Edvinsson L., El Said A., Glinton M., Hopsch S., Isaksson L., Mladek R., Olsson E., Verrelle A., Wang Z.Q., (2021): CERRA sub-daily regional reanalysis data for Europe on single levels from 1984 to present. Copernicus Climate Change Service (C3S) Climate Data Store (CDS), DOI: 10.24381/cds.622a565a.", Project = "PATHFINDER", Handler = "Erik Kusch")
 
-CERRA_ls <- lapply(2000:2023, FUN = function(YearIter) {
+CERRA_ls <- lapply(2015:2023, FUN = function(YearIter) {
     message(YearIter)
     FileName <- paste0("CERRA_max_", YearIter, ".nc")
 
@@ -84,9 +84,9 @@ CERRA_ls <- lapply(2000:2023, FUN = function(YearIter) {
         )
 
         CERRA_Year_ls <- list(
-            CERRA_mean = Temporal.Aggregration(CERRA_analysis_rast, TResolution = "month", TStep = 1, FUN = mean),
-            CERRA_min = Temporal.Aggregration(CERRA_analysis_rast, TResolution = "month", TStep = 1, FUN = min),
-            CERRA_max = Temporal.Aggregration(CERRA_analysis_rast, TResolution = "month", TStep = 1, FUN = max)
+            CERRA_mean = Temporal.Aggregration(CERRA_analysis_rast, TResolution = "day", TStep = 1, FUN = mean),
+            CERRA_min = Temporal.Aggregration(CERRA_analysis_rast, TResolution = "day", TStep = 1, FUN = min),
+            CERRA_max = Temporal.Aggregration(CERRA_analysis_rast, TResolution = "day", TStep = 1, FUN = max)
         )
 
         CERRA_Year2_ls <- lapply(CERRA_Year_ls, FUN = function(x) {
