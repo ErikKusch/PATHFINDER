@@ -75,5 +75,5 @@ StationData_df <- do.call(rbind, Extract_ls)
 
 ## Adding Derived Information ---------------------------------------------
 StationData_df <- EmulatorReadying(StationData_df)
-write.csv(apply(StationData_df, 2, as.character), "Data_StationLevel.csv")
+write.csv(apply(StationData_df, 2, as.character), file.path(Dir.EmulatorData, "Data_StationLevel.csv"))
 saveRDS(StationData_df, file.path(Dir.EmulatorData, "Data_StationLevel.rds"))

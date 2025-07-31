@@ -103,5 +103,5 @@ Data_1km_df$max <- Data_1km_df$max / 10 - 272.15
 
 ## Adding Derived Information ---------------------------------------------
 Data_1km_df <- EmulatorReadying(Data_1km_df)
-write.csv(Data_1km_df, "Data_1km_df.csv")
+write.csv(Data_1km_df, file.path(Dir.EmulatorData, "Data_1km_df.csv"))
 saveRDS(Data_1km_df, file.path(Dir.EmulatorData, "Data_1km_df.rds"))
