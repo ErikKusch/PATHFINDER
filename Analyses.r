@@ -84,7 +84,10 @@ lapply(names(ModelData_ls), FUN = function(NameIter) {
 
         # Return
         list(
-            Base = Basemod,
+            Base = list(
+                Base = Basemod,
+                Seasons = Seasonmod
+                ),
             Annual = AnnualEstimates_ls,
             Monthly = MonthlyEstimates_ls
         )
