@@ -42,8 +42,12 @@ names(ModelData_ls) <- gsub(pattern = "_df", replacement = "", gsub(tools::file_
 ## Linear Models ----------------------------------------------------------
 print("Analyses")
 lapply(names(ModelData_ls), FUN = function(NameIter) {
-    # NameIter = names(ModelData_ls)[1]
-    ModelData_df <- ModelData_ls[[NameIter]]
+    # NameIter = names(ModelData_ls)[2]
+    FNAME <- file.path(Dir.EmulatorData, paste0("EmulatorResults_", NameIter, ".RData"))
+    if(file.exists(FNAME)){
+        load(FNAME)
+    }else{
+        ModelData_df <- ModelData_ls[[NameIter]]
     message(NameIter)
     ## some more changes to the data frames
     ModelData_df$AGB_ESA <- unlist(ModelData_df$AGB_ESA)
@@ -65,10 +69,14 @@ lapply(names(ModelData_ls), FUN = function(NameIter) {
         ## Annual models
         message("Annual Estimates")
         YearIters <- unique(OutcomeModel_df$YEAR)
+        YearIters <- YearIters[YearIters %in% as.character(2015:2022)]
         AnnualEstimates_ls <- lapply(YearIters, FUN = function(YearIter) {
             print(YearIter)
             ModelData_Iter <- OutcomeModel_df[OutcomeModel_df$YEAR == YearIter, ]
-            lm(Outcome ~ AGB_ESA * SEASON + LATITUDE + LONGITUDE, data = ModelData_Iter)
+            list(
+                estimates = summary(lm(Outcome ~ AGB_ESA * SEASON + LATITUDE + LONGITUDE, data = ModelData_Iter))$coefficients,
+                RS2 = summary(lm(Outcome ~ AGB_ESA * SEASON + LATITUDE + LONGITUDE, data = ModelData_Iter))$r.squared
+            )
         })
         names(AnnualEstimates_ls) <- YearIters
 
@@ -78,21 +86,31 @@ lapply(names(ModelData_ls), FUN = function(NameIter) {
         MonthlyEstimates_ls <- lapply(MonthIters, FUN = function(MonthIter) {
             print(MonthIter)
             ModelData_Iter <- OutcomeModel_df[OutcomeModel_df$MONTH == MonthIter, ]
-            lm(Outcome ~ AGB_ESA * LATITUDE + LONGITUDE, data = ModelData_Iter)
+            list(
+                estimates = summary(lm(Outcome ~ AGB_ESA + LATITUDE + LONGITUDE, data = ModelData_Iter))$coefficients,
+                RS2 = summary(lm(Outcome ~ AGB_ESA + LATITUDE + LONGITUDE, data = ModelData_Iter))$r.squared
+            )
         })
         names(MonthlyEstimates_ls) <- MonthIters
 
         # Return
         list(
-            Base = list(
-                Base = Basemod,
-                Seasons = Seasonmod
+            AllInOne = list(
+                Base = list(
+                    estimates = summary(Basemod)$coefficients,
+                    RS2 = summary(Basemod)$r.squared
                 ),
+                Seasons = list(
+                    estimates = summary(Seasonmod)$coefficients,
+                    RS2 = summary(Seasonmod)$r.squared
+                )
+            ),
             Annual = AnnualEstimates_ls,
             Monthly = MonthlyEstimates_ls
         )
     })
     names(Outcome_ls) <- OutcomeIters
-    save(Outcome_ls, file = file.path(Dir.EmulatorData, paste0("EmulatorResults_", NameIter, ".RData")))
+    save(Outcome_ls, file = FNAME)
+    }
     Outcome_ls
 })
