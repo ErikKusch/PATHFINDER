@@ -2,3 +2,5 @@ PersonalSettings.R
 *.png
 *.nc
 GHCNQualityAssessment.r
+*.rds
+*.RData
