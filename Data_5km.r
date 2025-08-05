@@ -7,6 +7,8 @@
 #'      + Data_ESACCI-Biomass.r
 #'      + Data_CERRA.r
 #'      + Data_DEM.r
+#'  - Must be present:
+#'      + EmulatorReadying.r
 #' AUTHOR: [Erik Kusch]
 #' ####################################################################### #
 
@@ -27,13 +29,6 @@ package_vec <- c(
 )
 sapply(package_vec, install.load.package)
 
-### NON-CRAN PACKAGES ----
-if ("ClimHub" %in% rownames(installed.packages()) == FALSE) { # ClimHub check
-    devtools::install_github("ErikKusch/ClimHub")
-}
-library(ClimHub)
-package_vec <- c("ClimHub", package_vec)
-
 ## Directories ------------------------------------------------------------
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
@@ -44,6 +39,9 @@ Dir.EmulatorData <- "/div/no-backup-nac/PATHFINDER/EMULATOR-DATA"
 if (!dir.exists(Dir.EmulatorData)) {
     dir.create(Dir.EmulatorData)
 }
+
+## Functionality ------------------------------------------------------------
+source("EmulatorReadying.r")
 
 # DATA ====================================================================
 ## Loading ----------------------------------------------------------------
@@ -64,7 +62,6 @@ CERRA_mean <- CERRA_mean[[which(substr(time(CERRA_mean), 1, 4) %in% substr(time(
 CERRA_min <- CERRA_min[[which(substr(time(CERRA_min), 1, 4) %in% substr(time(ESA_agb_rast), 1, 4))]]
 CERRA_max <- CERRA_max[[which(substr(time(CERRA_max), 1, 4) %in% substr(time(ESA_agb_rast), 1, 4))]]
 
-
 ## Combining --------------------------------------------------------------
 Extract_ls <- pblapply(1:nlyr(CERRA_mean), FUN = function(Iter) {
     # Iter = 1
@@ -78,6 +75,7 @@ Extract_ls <- pblapply(1:nlyr(CERRA_mean), FUN = function(Iter) {
     Base_df <- as.data.frame(TAVG_Iter, cells = TRUE, time = TRUE, na.rm = FALSE, xy = TRUE)
     colnames(Base_df) <- c("CELL", "LONGITUDE", "LATITUDE", "mean")
     Base_df$YEAR_MONTH <- substr(time(TAVG_Iter), 1, 7)
+    Base_df$DAY <- substr(time(TAVG_Iter), 9, 10)
     Base_df <- Base_df[, c(1:3, 5, 4)]
     Base_df$min <- as.data.frame(TMIN_Iter, na.rm = FALSE)[, 1]
     Base_df$max <- as.data.frame(TMAX_Iter, na.rm = FALSE)[, 1]
@@ -102,5 +100,9 @@ Extract_ls <- pblapply(1:nlyr(CERRA_mean), FUN = function(Iter) {
 
 ## Exporting --------------------------------------------------------------
 Data_5km_df <- do.call(rbind, Extract_ls)
-# write.csv(Data_1km_df, "Data_1km_df.csv")
+
+## Adding Derived Information ---------------------------------------------
+Data_5km_df <- EmulatorReadying(Data_5km_df)
+Data_5km_df <- na.omit(Data_5km_df)
+write.csv(Data_5km_df, file.path(Dir.EmulatorData, "Data_5km_df.csv"))
 saveRDS(Data_5km_df, file.path(Dir.EmulatorData, "Data_5km_df.rds"))

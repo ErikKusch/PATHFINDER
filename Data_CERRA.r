@@ -119,7 +119,7 @@ CERRA_rasts_ls <- lapply(names(CERRA_ls[[1]]), FUN = function(x) {
         NC = CERRA_iter,
         FName = file.path(Dir.CERRA, paste0("CERRA_", x, ".nc")),
         Variable = "2m temperature",
-        LongVar = paste(x, "monthly air temperature"),
+        LongVar = paste(x, "daily air temperature"),
         Unit = "C",
         Attrs = Meta_vec, Write = TRUE, Compression = 9
     )

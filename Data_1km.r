@@ -29,13 +29,6 @@ package_vec <- c(
 )
 sapply(package_vec, install.load.package)
 
-### NON-CRAN PACKAGES ----
-if ("ClimHub" %in% rownames(installed.packages()) == FALSE) { # ClimHub check
-    devtools::install_github("ErikKusch/ClimHub")
-}
-library(ClimHub)
-package_vec <- c("ClimHub", package_vec)
-
 ## Directories ------------------------------------------------------------
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
@@ -103,5 +96,6 @@ Data_1km_df$max <- Data_1km_df$max / 10 - 272.15
 
 ## Adding Derived Information ---------------------------------------------
 Data_1km_df <- EmulatorReadying(Data_1km_df)
+Data_1km_df <- na.omit(Data_1km_df)
 write.csv(Data_1km_df, file.path(Dir.EmulatorData, "Data_1km_df.csv"))
 saveRDS(Data_1km_df, file.path(Dir.EmulatorData, "Data_1km_df.rds"))

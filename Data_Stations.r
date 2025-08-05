@@ -28,13 +28,6 @@ package_vec <- c(
 )
 sapply(package_vec, install.load.package)
 
-### NON-CRAN PACKAGES ----
-if ("ClimHub" %in% rownames(installed.packages()) == FALSE) { # ClimHub check
-    devtools::install_github("ErikKusch/ClimHub")
-}
-library(ClimHub)
-package_vec <- c("ClimHub", package_vec)
-
 ## Directories ------------------------------------------------------------
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
@@ -53,7 +46,7 @@ GHCN_df <- readRDS(file.path(Dir.GHCN, "GHCN_2000-2024_MONTHLY.rds"))
 Stations_df <- readRDS(file.path(Dir.GHCN, "GHCN_Stations_2000-2024_CLEANED.rds"))
 
 ## Combining --------------------------------------------------------------
-Extract_ls <- pblapply(1:nrow(GHCN_df), cl = 36, FUN = function(Iter){
+Extract_ls <- pblapply(1:nrow(GHCN_df), cl = 8, FUN = function(Iter){
     # print(Iter)
     Iter_df <- GHCN_df[Iter, ]
     Iter_df <- cbind(Stations_df[which(Stations_df$STATION == Iter_df$STATION), ], Iter_df[ , -1])
@@ -75,5 +68,6 @@ StationData_df <- do.call(rbind, Extract_ls)
 
 ## Adding Derived Information ---------------------------------------------
 StationData_df <- EmulatorReadying(StationData_df)
+StationData_df <- na.omit(StationData_df)
 write.csv(apply(StationData_df, 2, as.character), file.path(Dir.EmulatorData, "Data_StationLevel.csv"))
 saveRDS(StationData_df, file.path(Dir.EmulatorData, "Data_StationLevel.rds"))
