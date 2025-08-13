@@ -22,7 +22,9 @@ package_vec <- c(
     "terra", # for spatraster operations
     "sf", # for polygon handling
     "ggplot2", # for plotting
-    "rnaturalearth" # four outlines of countries
+    "rnaturalearth", # four outlines of countries
+    "tidybayes", # nice distribution plotting
+    "cowplot" # for grid plot constellations
 )
 sapply(package_vec, install.load.package)
 
@@ -139,74 +141,146 @@ ggsave(CERRA_gg, file = "CERRA.png", width = 16, height = 16, unit = "cm", limit
 Fs <- list.files(pattern = "EmulatorResults")
 
 lapply(Fs, FUN = function(FIter) {
+    # FIter <- Fs[4]
     load(FIter)
     ScaleName <- tools::file_path_sans_ext(gsub(pattern = "EmulatorResults_", replacement = "", FIter))
-
-    ## Annual Results
-    AnnualPlot_df <- do.call(rbind, lapply(names(Outcome_ls), FUN = function(OutcomeIter) {
-        AnnualPlot_df <- do.call(rbind, lapply(names(Outcome_ls[[OutcomeIter]]$Annual), FUN = function(YearIter) {
-            # YearIter <- as.character(2015)
-
-            Coeffs_df <- Outcome_ls[[OutcomeIter]]$Annual[[YearIter]]$estimates
-
-            Estimate <- Coeffs_df[, "Estimate"]
-            Estimates <- Estimate[which(names(Estimate) == "AGB_ESA")]
-            Estimates <- c(Estimates, Estimates + Estimate[which(names(Estimate) == "AGB_ESA:SEASONJJA")])
-
-            PValue <- Coeffs_df[, "Pr(>|t|)"]
-            PValues <- c(PValue[which(names(Estimate) == "AGB_ESA")], PValue[which(names(Estimate) == "AGB_ESA:SEASONJJA")])
-
-            data.frame(
-                R2 = c(Outcome_ls[[OutcomeIter]]$Annual[[YearIter]]$RS2, NA),
-                Pvalue = PValues,
-                Estimate = Estimates,
-                Season = c("Winter", "Summer"),
-                Year = YearIter,
-                Outcome = OutcomeIter
-            )
+    if (grepl("_LocationSpecific", ScaleName)) {
+        plot_df <- do.call(rbind, lapply(1:length(Locs_ls), FUN = function(x) {
+            # print(x)
+            x <- Locs_ls[[x]]
+            if (class(x$Models$Seasons$estimates)[1] == "logical") {
+                Ret <- data.frame(Value = NA, Variable = NA)
+            } else {
+                Coeffs <- x$Models$Seasons$estimates
+                Ret <- data.frame(
+                    Value = c(
+                        x$NumLocs,
+                        x$NumMeasures,
+                        Coeffs[which(rownames(Coeffs) == "AGB_ESA:SEASONDJF"), c(1, 4)],
+                        # Coeffs[which(rownames(Coeffs) == "AGB_ESA:SEASONJJA"), c(1, 4)],
+                        Coeffs[which(rownames(Coeffs) == "AGB_ESA"), 1] + Coeffs[which(rownames(Coeffs) == "AGB_ESA:SEASONJJA"), 1],
+                        Coeffs[which(rownames(Coeffs) == "AGB_ESA:SEASONJJA"), 4],
+                        x$Models$Seasons$RS2
+                    ),
+                    Variable = c("Number of Stations", "Number of Data Points", "Estimate (Winter)", "P-Value (Winter)", "Estimate (Summer)", "P-Value (Summer)", "R2")
+                )
+            }
+            cbind(x$Location, Ret)
         }))
-        AnnualPlot_df
-    }))
+        plot_df <- na.omit(plot_df)
 
-    Annual_gg <- ggplot(AnnualPlot_df, aes(x = Year, y = Estimate, shape = Pvalue < 0.05, col = Season, group = Season)) +
-        geom_point() +
-        geom_line() +
-        geom_label(aes(label = round(R2, 2), y = -0.001), col = "black") + # Override y aesthetic here
-        geom_hline(yintercept = 0, lty = 2) +
-        facet_wrap(~Outcome, ncol = 1, scales = "free") +
-        theme_bw()
-    ggsave(Annual_gg, file = paste0(ScaleName, "_Annual.png"), width = 16 * 2, height = 16 * 1.2, unit = "cm")
+        NumStat <- ggplot() +
+            geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
+            geom_point(data = plot_df[plot_df$Variable == "Number of Stations", ], aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
+            theme_bw() +
+            labs(title = "Number of Stations")
 
-    ## Monthly Results
-    MonthlyPlot_df <- do.call(rbind, lapply(names(Outcome_ls), FUN = function(OutcomeIter) {
-        MonthlyPlot_df <- do.call(rbind, lapply(names(Outcome_ls[[OutcomeIter]]$Monthly), FUN = function(MonthIter) {
-            # MonthIter <- "01"
+        NumData <- ggplot() +
+            geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
+            geom_point(data = plot_df[plot_df$Variable == "Number of Data Points", ], aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
+            theme_bw() +
+            labs(title = "Number of Data Points")
 
-            Coeffs_df <- Outcome_ls[[OutcomeIter]]$Monthly[[MonthIter]]$estimates
+        RS2 <- ggplot() +
+            geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
+            geom_point(data = plot_df[plot_df$Variable == "R2", ], aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
+            theme_bw() +
+            labs(title = "Model R quared")
 
-            Estimate <- Coeffs_df[, "Estimate"]
-            Estimates <- Estimate[which(names(Estimate) == "AGB_ESA")]
+        check <- c(
+            list(
+                plot_grid(NumStat, NumData, RS2, ncol = 3)
+            ),
+            lapply(c("(Winter)", "(Summer)"), FUN = function(Season) {
+                PValues <- ggplot() +
+                    geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
+                    geom_point(data = plot_df[plot_df$Variable == paste("P-Value", Season), ], aes(x = LONGITUDE, y = LATITUDE, col = Value < 0.05)) +
+                    theme_bw() +
+                    labs(title = paste("P-values", Season))
 
-            PValue <- Coeffs_df[, "Pr(>|t|)"]
-            PValues <- PValue[which(names(Estimate) == "AGB_ESA")]
+                Estimates <- ggplot() +
+                    geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
+                    geom_point(data = plot_df[plot_df$Variable == paste("Estimate", Season), ], aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
+                    scale_colour_gradient2(low = "darkblue", high = "darkgreen") +
+                    theme_bw() +
+                    labs(title = paste("Estimates", Season))
 
-            data.frame(
-                R2 = Outcome_ls[[OutcomeIter]]$Monthly[[MonthIter]]$RS2,
-                Pvalue = PValues,
-                Estimate = Estimates,
-                Month = MonthIter,
-                Outcome = OutcomeIter
-            )
+                Distrib <- ggplot(data = plot_df[plot_df$Variable == paste("Estimate", Season), ], aes(x = Value)) +
+                    stat_halfeye() +
+                    theme_bw() +
+                    labs(title = paste("Estimates", Season))
+
+                plot_grid(Estimates, Distrib, PValues, ncol = 3)
+            })
+        )
+        ggsave(plot_grid(plotlist = check, ncol = 1), file = paste0(ScaleName, ".png"), width = 16 * 3, height = 16 * 3, unit = "cm")
+    } else {
+        ## Annual Results
+        AnnualPlot_df <- do.call(rbind, lapply(names(Outcome_ls), FUN = function(OutcomeIter) {
+            AnnualPlot_df <- do.call(rbind, lapply(names(Outcome_ls[[OutcomeIter]]$Annual), FUN = function(YearIter) {
+                # YearIter <- as.character(2015)
+
+                Coeffs_df <- Outcome_ls[[OutcomeIter]]$Annual[[YearIter]]$estimates
+
+                Estimate <- Coeffs_df[, "Estimate"]
+                Estimates <- Estimate[which(names(Estimate) == "AGB_ESA")]
+                Estimates <- c(Estimates, Estimates + Estimate[which(names(Estimate) == "AGB_ESA:SEASONJJA")])
+
+                PValue <- Coeffs_df[, "Pr(>|t|)"]
+                PValues <- c(PValue[which(names(Estimate) == "AGB_ESA")], PValue[which(names(Estimate) == "AGB_ESA:SEASONJJA")])
+
+                data.frame(
+                    R2 = c(Outcome_ls[[OutcomeIter]]$Annual[[YearIter]]$RS2, NA),
+                    Pvalue = PValues,
+                    Estimate = Estimates,
+                    Season = c("Winter", "Summer"),
+                    Year = YearIter,
+                    Outcome = OutcomeIter
+                )
+            }))
+            AnnualPlot_df
         }))
-        MonthlyPlot_df
-    }))
 
-    Monthly_gg <- ggplot(MonthlyPlot_df, aes(x = Month, y = Estimate, shape = Pvalue < 0.05, group = 1)) +
-        geom_point() +
-        geom_line() +
-        geom_label(aes(label = round(R2, 2), y = -0.001), col = "black") + # Override y aesthetic here
-        geom_hline(yintercept = 0) +
-        facet_wrap(~Outcome, ncol = 1, scales = "free") +
-        theme_bw()
-    ggsave(Monthly_gg, file = paste0(ScaleName, "_Monthly.png"), width = 16 * 2, height = 16 * 1.2, unit = "cm")
+        Annual_gg <- ggplot(AnnualPlot_df, aes(x = Year, y = Estimate, shape = Pvalue < 0.05, col = Season, group = Season)) +
+            geom_point() +
+            geom_line() +
+            geom_label(aes(label = round(R2, 2), y = -0.001), col = "black") + # Override y aesthetic here
+            geom_hline(yintercept = 0, lty = 2) +
+            facet_wrap(~Outcome, ncol = 1, scales = "free") +
+            theme_bw()
+        ggsave(Annual_gg, file = paste0(ScaleName, "_Annual.png"), width = 16 * 2, height = 16 * 1.2, unit = "cm")
+
+        ## Monthly Results
+        MonthlyPlot_df <- do.call(rbind, lapply(names(Outcome_ls), FUN = function(OutcomeIter) {
+            MonthlyPlot_df <- do.call(rbind, lapply(names(Outcome_ls[[OutcomeIter]]$Monthly), FUN = function(MonthIter) {
+                # MonthIter <- "01"
+
+                Coeffs_df <- Outcome_ls[[OutcomeIter]]$Monthly[[MonthIter]]$estimates
+
+                Estimate <- Coeffs_df[, "Estimate"]
+                Estimates <- Estimate[which(names(Estimate) == "AGB_ESA")]
+
+                PValue <- Coeffs_df[, "Pr(>|t|)"]
+                PValues <- PValue[which(names(Estimate) == "AGB_ESA")]
+
+                data.frame(
+                    R2 = Outcome_ls[[OutcomeIter]]$Monthly[[MonthIter]]$RS2,
+                    Pvalue = PValues,
+                    Estimate = Estimates,
+                    Month = MonthIter,
+                    Outcome = OutcomeIter
+                )
+            }))
+            MonthlyPlot_df
+        }))
+
+        Monthly_gg <- ggplot(MonthlyPlot_df, aes(x = Month, y = Estimate, shape = Pvalue < 0.05, group = 1)) +
+            geom_point() +
+            geom_line() +
+            geom_label(aes(label = round(R2, 2), y = -0.001), col = "black") + # Override y aesthetic here
+            geom_hline(yintercept = 0) +
+            facet_wrap(~Outcome, ncol = 1, scales = "free") +
+            theme_bw()
+        ggsave(Monthly_gg, file = paste0(ScaleName, "_Monthly.png"), width = 16 * 2, height = 16 * 1.2, unit = "cm")
+    }
 })
