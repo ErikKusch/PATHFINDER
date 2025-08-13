@@ -116,8 +116,8 @@ lapply(Fs, FUN = function(FIter) {
 
 ## Location-Specific Models -----------------------------------------------
 message("+++ Location-Specific Models +++")
-lapply(Fs, FUN = function(FIter) {
-    # FIter <- Fs[2]
+LocSpec_ls <- lapply(Fs, FUN = function(FIter) {
+    # FIter <- Fs[1]
     NameIter <- gsub(pattern = "_df", replacement = "", gsub(tools::file_path_sans_ext(basename(FIter)), pattern = "Data_", replacement = ""))
     FNAME <- file.path(Dir.EmulatorData, paste0("EmulatorResults_", NameIter, "_LocationSpecific.RData"))
     print(paste("--- Scale:", NameIter))
@@ -127,32 +127,34 @@ lapply(Fs, FUN = function(FIter) {
     } else {
         print("Compiling")
         ModelData_df <- readRDS(FIter) # ModelData_ls[[NameIter]]
-        ModelData_df <- na.omit(ModelData_df)
         ## some more changes to the data frames
         ModelData_df$AGB_ESA <- unlist(ModelData_df$AGB_ESA)
         ModelData_df$YEAR <- substr(ModelData_df$YEAR_MONTH, 1, 4)
         ModelData_df$MONTH <- substr(ModelData_df$YEAR_MONTH, 6, 7)
+        ModelData_df <- na.omit(ModelData_df)
 
         ## subset here for each location and its surrounding information
-        Var_df <- ModelData_df[ModelData_df$VARIABLE == "TAVG", ]
-        Locs_df <- Var_df[, c("LATITUDE", "LONGITUDE")]
+        if ("VARIABLE" %in% colnames(ModelData_df)) {
+            ModelData_df <- ModelData_df[ModelData_df$VARIABLE == "TAVG", ]
+        }
+        Locs_df <- ModelData_df[, c("LATITUDE", "LONGITUDE")]
         ULocs_df <- unique(Locs_df)
 
         Locs_ls <- pblapply(1:nrow(ULocs_df), FUN = function(LocIter) {
-            # LocIter <- c(LATITUDE = 50.417, LONGITUDE = 25.75)
+            # LocIter <- c(LATITUDE =  45.3667, LONGITUDE =  28.85)
             ## subset for location
             LocIter <- ULocs_df[LocIter, ]
             # print(LocIter)
-            max_distance <- 25000 # 25 km
-            Var_df$distance_m <- distHaversine( ## calculate distance in m
+            max_distance <- 50000 # 50 km
+            ModelData_df$distance_m <- distHaversine( ## calculate distance in m
                 p1 = Locs_df,
                 p2 = LocIter
             )
-            Loc_df <- subset(Var_df, distance_m <= max_distance) # subset for maximum distance
+            Loc_df <- subset(ModelData_df, distance_m <= max_distance) # subset for maximum distance
 
             ## analysis
             # print(LocIter)
-            if (length(unique(Loc_df$SEASON)) < 4) {
+            if (length(unique(Loc_df$SEASON)) < 4 | all(tapply(Loc_df$AGB_ESA, Loc_df$SEASON, function(x) length(unique(x))) < 2)) {
                 ## export of objects
                 list(
                     Location = LocIter,
@@ -171,7 +173,7 @@ lapply(Fs, FUN = function(FIter) {
                 )
             } else {
                 Basemod <- lm(mean ~ AGB_ESA + ELEVATION, data = Loc_df)
-                Seasonmod <- lm(mean ~ AGB_ESA + AGB_ESA:SEASON + ELEVATION, data = Loc_df)
+                Seasonmod <- lm(mean ~ AGB_ESA + AGB_ESA:SEASON + ELEVATION, data = Loc_df) #  lm(mean ~ 0 + AGB_ESA:SEASON + ELEVATION, data = Loc_df)
                 ## export of objects
                 list(
                     Location = LocIter,
@@ -192,4 +194,5 @@ lapply(Fs, FUN = function(FIter) {
         })
         save(Locs_ls, file = FNAME)
     }
+    Locs_ls
 })
