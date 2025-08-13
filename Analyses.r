@@ -20,7 +20,8 @@ install.load.package <- function(x) {
 ### CRAN PACKAGES ----
 package_vec <- c(
     "pbapply",
-    "stringr"
+    "stringr",
+    "geosphere" # for distance calculations in moving window
 )
 sapply(package_vec, install.load.package)
 
@@ -28,31 +29,25 @@ sapply(package_vec, install.load.package)
 Dir.Base <- getwd()
 Dir.EmulatorData <- "/div/no-backup-nac/PATHFINDER/EMULATOR-DATA"
 
-# ANALYSES ================================================================
-## Data -------------------------------------------------------------------
-print("Data Loading")
-# ModelData_df <- readRDS(file.path(Dir.EmulatorData, "Data_StationLevel.rds"))
+# DATA ====================================================================
+message("####### Registering Data Files")
 Fs <- list.files(Dir.EmulatorData, pattern = ".rds", full.names = TRUE)
-# ModelData_ls <- lapply(Fs, FUN = function(FIter) {
-#     print(basename(FIter))
-#     readRDS(FIter)
-# })
-# names(ModelData_ls) <- gsub(pattern = "_df", replacement = "", gsub(tools::file_path_sans_ext(basename(Fs)), pattern = "Data_", replacement = ""))
+
+# ANALYSES ================================================================
+message("####### Carrying out Analyses")
 
 ## Linear Models ----------------------------------------------------------
-print("Analyses")
+message("+++ Linear Models +++")
 lapply(Fs, FUN = function(FIter) {
     NameIter <- gsub(pattern = "_df", replacement = "", gsub(tools::file_path_sans_ext(basename(FIter)), pattern = "Data_", replacement = ""))
-    # NameIter = names(ModelData_ls)[2]
     FNAME <- file.path(Dir.EmulatorData, paste0("EmulatorResults_", NameIter, ".RData"))
-    message(NameIter)
-    if(file.exists(FNAME)){
+    print(paste("--- Scale:", NameIter))
+    if (file.exists(FNAME)) {
         print("Already Compiled")
         load(FNAME)
-    }else{
+    } else {
         print("Compiling")
         ModelData_df <- readRDS(FIter) # ModelData_ls[[NameIter]]
-        message(NameIter)
         ## some more changes to the data frames
         ModelData_df$AGB_ESA <- unlist(ModelData_df$AGB_ESA)
         ModelData_df$YEAR <- substr(ModelData_df$YEAR_MONTH, 1, 4)
@@ -82,39 +77,119 @@ lapply(Fs, FUN = function(FIter) {
                     RS2 = summary(lm(Outcome ~ AGB_ESA * SEASON + LATITUDE + LONGITUDE, data = ModelData_Iter))$r.squared
                 )
             })
-        names(AnnualEstimates_ls) <- YearIters
+            names(AnnualEstimates_ls) <- YearIters
 
-        ## Monthly Models
-        message("Monthly Estimates")
-        MonthIters <- str_pad(as.character(1:12), 2, "left", "0")
-        MonthlyEstimates_ls <- lapply(MonthIters, FUN = function(MonthIter) {
-            print(MonthIter)
-            ModelData_Iter <- OutcomeModel_df[OutcomeModel_df$MONTH == MonthIter, ]
+            ## Monthly Models
+            message("Monthly Estimates")
+            MonthIters <- str_pad(as.character(1:12), 2, "left", "0")
+            MonthlyEstimates_ls <- lapply(MonthIters, FUN = function(MonthIter) {
+                print(MonthIter)
+                ModelData_Iter <- OutcomeModel_df[OutcomeModel_df$MONTH == MonthIter, ]
+                list(
+                    estimates = summary(lm(Outcome ~ AGB_ESA + LATITUDE + LONGITUDE, data = ModelData_Iter))$coefficients,
+                    RS2 = summary(lm(Outcome ~ AGB_ESA + LATITUDE + LONGITUDE, data = ModelData_Iter))$r.squared
+                )
+            })
+            names(MonthlyEstimates_ls) <- MonthIters
+
+            # Return
             list(
-                estimates = summary(lm(Outcome ~ AGB_ESA + LATITUDE + LONGITUDE, data = ModelData_Iter))$coefficients,
-                RS2 = summary(lm(Outcome ~ AGB_ESA + LATITUDE + LONGITUDE, data = ModelData_Iter))$r.squared
+                AllInOne = list(
+                    Base = list(
+                        estimates = summary(Basemod)$coefficients,
+                        RS2 = summary(Basemod)$r.squared
+                    ),
+                    Seasons = list(
+                        estimates = summary(Seasonmod)$coefficients,
+                        RS2 = summary(Seasonmod)$r.squared
+                    )
+                ),
+                Annual = AnnualEstimates_ls,
+                Monthly = MonthlyEstimates_ls
             )
         })
-        names(MonthlyEstimates_ls) <- MonthIters
-
-        # Return
-        list(
-            AllInOne = list(
-                Base = list(
-                    estimates = summary(Basemod)$coefficients,
-                    RS2 = summary(Basemod)$r.squared
-                ),
-                Seasons = list(
-                    estimates = summary(Seasonmod)$coefficients,
-                    RS2 = summary(Seasonmod)$r.squared
-                )
-            ),
-            Annual = AnnualEstimates_ls,
-            Monthly = MonthlyEstimates_ls
-        )
-    })
-    names(Outcome_ls) <- OutcomeIters
-    save(Outcome_ls, file = FNAME)
+        names(Outcome_ls) <- OutcomeIters
+        save(Outcome_ls, file = FNAME)
     }
     Outcome_ls
+})
+
+## Location-Specific Models -----------------------------------------------
+message("+++ Location-Specific Models +++")
+lapply(Fs, FUN = function(FIter) {
+    # FIter <- Fs[2]
+    NameIter <- gsub(pattern = "_df", replacement = "", gsub(tools::file_path_sans_ext(basename(FIter)), pattern = "Data_", replacement = ""))
+    FNAME <- file.path(Dir.EmulatorData, paste0("EmulatorResults_", NameIter, "_LocationSpecific.RData"))
+    print(paste("--- Scale:", NameIter))
+    if (file.exists(FNAME)) {
+        print("Already Compiled")
+        load(FNAME)
+    } else {
+        print("Compiling")
+        ModelData_df <- readRDS(FIter) # ModelData_ls[[NameIter]]
+        ModelData_df <- na.omit(ModelData_df)
+        ## some more changes to the data frames
+        ModelData_df$AGB_ESA <- unlist(ModelData_df$AGB_ESA)
+        ModelData_df$YEAR <- substr(ModelData_df$YEAR_MONTH, 1, 4)
+        ModelData_df$MONTH <- substr(ModelData_df$YEAR_MONTH, 6, 7)
+
+        ## subset here for each location and its surrounding information
+        Var_df <- ModelData_df[ModelData_df$VARIABLE == "TAVG", ]
+        Locs_df <- Var_df[, c("LATITUDE", "LONGITUDE")]
+        ULocs_df <- unique(Locs_df)
+
+        Locs_ls <- pblapply(1:nrow(ULocs_df), FUN = function(LocIter) {
+            # LocIter <- c(LATITUDE = 50.417, LONGITUDE = 25.75)
+            ## subset for location
+            LocIter <- ULocs_df[LocIter, ]
+            # print(LocIter)
+            max_distance <- 25000 # 25 km
+            Var_df$distance_m <- distHaversine( ## calculate distance in m
+                p1 = Locs_df,
+                p2 = LocIter
+            )
+            Loc_df <- subset(Var_df, distance_m <= max_distance) # subset for maximum distance
+
+            ## analysis
+            # print(LocIter)
+            if (length(unique(Loc_df$SEASON)) < 4) {
+                ## export of objects
+                list(
+                    Location = LocIter,
+                    NumLocs = length(unique(Loc_df$STATION)),
+                    NumMeasures = nrow(Loc_df),
+                    Models = list(
+                        Base = list(
+                            estimates = NA,
+                            RS2 = NA
+                        ),
+                        Seasons = list(
+                            estimates = NA,
+                            RS2 = NA
+                        )
+                    )
+                )
+            } else {
+                Basemod <- lm(mean ~ AGB_ESA + ELEVATION, data = Loc_df)
+                Seasonmod <- lm(mean ~ AGB_ESA + AGB_ESA:SEASON + ELEVATION, data = Loc_df)
+                ## export of objects
+                list(
+                    Location = LocIter,
+                    NumLocs = length(unique(Loc_df$STATION)),
+                    NumMeasures = nrow(Loc_df),
+                    Models = list(
+                        Base = list(
+                            estimates = summary(Basemod)$coefficients,
+                            RS2 = summary(Basemod)$r.squared
+                        ),
+                        Seasons = list(
+                            estimates = summary(Seasonmod)$coefficients,
+                            RS2 = summary(Seasonmod)$r.squared
+                        )
+                    )
+                )
+            }
+        })
+        save(Locs_ls, file = FNAME)
+    }
 })
