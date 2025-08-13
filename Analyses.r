@@ -33,51 +33,55 @@ Dir.EmulatorData <- "/div/no-backup-nac/PATHFINDER/EMULATOR-DATA"
 print("Data Loading")
 # ModelData_df <- readRDS(file.path(Dir.EmulatorData, "Data_StationLevel.rds"))
 Fs <- list.files(Dir.EmulatorData, pattern = ".rds", full.names = TRUE)
-ModelData_ls <- lapply(Fs, FUN = function(FIter) {
-    print(basename(FIter))
-    readRDS(FIter)
-})
-names(ModelData_ls) <- gsub(pattern = "_df", replacement = "", gsub(tools::file_path_sans_ext(basename(Fs)), pattern = "Data_", replacement = ""))
+# ModelData_ls <- lapply(Fs, FUN = function(FIter) {
+#     print(basename(FIter))
+#     readRDS(FIter)
+# })
+# names(ModelData_ls) <- gsub(pattern = "_df", replacement = "", gsub(tools::file_path_sans_ext(basename(Fs)), pattern = "Data_", replacement = ""))
 
 ## Linear Models ----------------------------------------------------------
 print("Analyses")
-lapply(names(ModelData_ls), FUN = function(NameIter) {
+lapply(Fs, FUN = function(FIter) {
+    NameIter <- gsub(pattern = "_df", replacement = "", gsub(tools::file_path_sans_ext(basename(FIter)), pattern = "Data_", replacement = ""))
     # NameIter = names(ModelData_ls)[2]
     FNAME <- file.path(Dir.EmulatorData, paste0("EmulatorResults_", NameIter, ".RData"))
+    message(NameIter)
     if(file.exists(FNAME)){
+        print("Already Compiled")
         load(FNAME)
     }else{
-        ModelData_df <- ModelData_ls[[NameIter]]
-    message(NameIter)
-    ## some more changes to the data frames
-    ModelData_df$AGB_ESA <- unlist(ModelData_df$AGB_ESA)
-    ModelData_df$YEAR <- substr(ModelData_df$YEAR_MONTH, 1, 4)
-    ModelData_df$MONTH <- substr(ModelData_df$YEAR_MONTH, 6, 7)
+        print("Compiling")
+        ModelData_df <- readRDS(FIter) # ModelData_ls[[NameIter]]
+        message(NameIter)
+        ## some more changes to the data frames
+        ModelData_df$AGB_ESA <- unlist(ModelData_df$AGB_ESA)
+        ModelData_df$YEAR <- substr(ModelData_df$YEAR_MONTH, 1, 4)
+        ModelData_df$MONTH <- substr(ModelData_df$YEAR_MONTH, 6, 7)
 
-    # Looping over outcomes that we want to model
-    OutcomeIters <- c("mean", "range")
-    Outcome_ls <- lapply(OutcomeIters, FUN = function(OutcomeIter) {
-        # OutcomeIter = OutcomeIters[1]
-        message(OutcomeIter)
-        OutcomeModel_df <- ModelData_df
-        colnames(OutcomeModel_df)[which(colnames(OutcomeModel_df) == OutcomeIter)] <- "Outcome"
-        ## Basal models
-        message("Base Estimates")
-        Basemod <- lm(Outcome ~ AGB_ESA + LATITUDE + LONGITUDE + ELEVATION, data = OutcomeModel_df)
-        Seasonmod <- lm(Outcome ~ AGB_ESA + AGB_ESA:SEASON + LATITUDE + LONGITUDE, data = OutcomeModel_df)
+        # Looping over outcomes that we want to model
+        OutcomeIters <- c("mean", "range")
+        Outcome_ls <- lapply(OutcomeIters, FUN = function(OutcomeIter) {
+            # OutcomeIter = OutcomeIters[1]
+            message(OutcomeIter)
+            OutcomeModel_df <- ModelData_df
+            colnames(OutcomeModel_df)[which(colnames(OutcomeModel_df) == OutcomeIter)] <- "Outcome"
+            ## Basal models
+            message("Base Estimates")
+            Basemod <- lm(Outcome ~ AGB_ESA + LATITUDE + LONGITUDE + ELEVATION, data = OutcomeModel_df)
+            Seasonmod <- lm(Outcome ~ AGB_ESA + AGB_ESA:SEASON + LATITUDE + LONGITUDE, data = OutcomeModel_df)
 
-        ## Annual models
-        message("Annual Estimates")
-        YearIters <- unique(OutcomeModel_df$YEAR)
-        YearIters <- YearIters[YearIters %in% as.character(2015:2022)]
-        AnnualEstimates_ls <- lapply(YearIters, FUN = function(YearIter) {
-            print(YearIter)
-            ModelData_Iter <- OutcomeModel_df[OutcomeModel_df$YEAR == YearIter, ]
-            list(
-                estimates = summary(lm(Outcome ~ AGB_ESA * SEASON + LATITUDE + LONGITUDE, data = ModelData_Iter))$coefficients,
-                RS2 = summary(lm(Outcome ~ AGB_ESA * SEASON + LATITUDE + LONGITUDE, data = ModelData_Iter))$r.squared
-            )
-        })
+            ## Annual models
+            message("Annual Estimates")
+            YearIters <- unique(OutcomeModel_df$YEAR)
+            YearIters <- YearIters[YearIters %in% as.character(2015:2022)]
+            AnnualEstimates_ls <- lapply(YearIters, FUN = function(YearIter) {
+                print(YearIter)
+                ModelData_Iter <- OutcomeModel_df[OutcomeModel_df$YEAR == YearIter, ]
+                list(
+                    estimates = summary(lm(Outcome ~ AGB_ESA * SEASON + LATITUDE + LONGITUDE, data = ModelData_Iter))$coefficients,
+                    RS2 = summary(lm(Outcome ~ AGB_ESA * SEASON + LATITUDE + LONGITUDE, data = ModelData_Iter))$r.squared
+                )
+            })
         names(AnnualEstimates_ls) <- YearIters
 
         ## Monthly Models

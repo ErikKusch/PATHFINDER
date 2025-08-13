@@ -46,7 +46,7 @@ GHCN_df <- readRDS(file.path(Dir.GHCN, "GHCN_2000-2024_MONTHLY.rds"))
 Stations_df <- readRDS(file.path(Dir.GHCN, "GHCN_Stations_2000-2024_CLEANED.rds"))
 
 ## Combining --------------------------------------------------------------
-Extract_ls <- pblapply(1:nrow(GHCN_df), cl = 8, FUN = function(Iter){
+Extract_ls <- pblapply(1:nrow(GHCN_df), FUN = function(Iter){
     # print(Iter)
     Iter_df <- GHCN_df[Iter, ]
     Iter_df <- cbind(Stations_df[which(Stations_df$STATION == Iter_df$STATION), ], Iter_df[ , -1])
