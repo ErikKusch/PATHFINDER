@@ -140,12 +140,12 @@ LocSpec_ls <- lapply(Fs, FUN = function(FIter) {
         Locs_df <- ModelData_df[, c("LATITUDE", "LONGITUDE")]
         ULocs_df <- unique(Locs_df)
 
-        Locs_ls <- pblapply(1:nrow(ULocs_df), FUN = function(LocIter) {
+        Locs_ls <- pblapply(1:nrow(ULocs_df), cl = 50, FUN = function(LocIter) {
             # LocIter <- c(LATITUDE =  45.3667, LONGITUDE =  28.85)
             ## subset for location
             LocIter <- ULocs_df[LocIter, ]
             # print(LocIter)
-            max_distance <- 50000 # 50 km
+            max_distance <- 25000 # 25 km
             ModelData_df$distance_m <- distHaversine( ## calculate distance in m
                 p1 = Locs_df,
                 p2 = LocIter
