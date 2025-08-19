@@ -24,7 +24,8 @@ package_vec <- c(
     "ggplot2", # for plotting
     "rnaturalearth", # four outlines of countries
     "tidybayes", # nice distribution plotting
-    "cowplot" # for grid plot constellations
+    "cowplot", # for grid plot constellations
+    "dplyr" # for easier subsetting
 )
 sapply(package_vec, install.load.package)
 
@@ -141,11 +142,11 @@ ggsave(CERRA_gg, file = "CERRA.png", width = 16, height = 16, unit = "cm", limit
 Fs <- list.files(pattern = "EmulatorResults")
 
 lapply(Fs, FUN = function(FIter) {
-    # FIter <- Fs[4]
+    # FIter <- Fs[3]
     load(FIter)
     ScaleName <- tools::file_path_sans_ext(gsub(pattern = "EmulatorResults_", replacement = "", FIter))
     if (grepl("_LocationSpecific", ScaleName)) {
-        plot_df <- do.call(rbind, lapply(1:length(Locs_ls), FUN = function(x) {
+        plot_df <- do.call(rbind, pblapply(1:length(Locs_ls), FUN = function(x) {
             # print(x)
             x <- Locs_ls[[x]]
             if (class(x$Models$Seasons$estimates)[1] == "logical") {
@@ -156,7 +157,7 @@ lapply(Fs, FUN = function(FIter) {
                     Value = c(
                         x$NumLocs,
                         x$NumMeasures,
-                        Coeffs[which(rownames(Coeffs) == "AGB_ESA:SEASONDJF"), c(1, 4)],
+                        Coeffs[which(rownames(Coeffs) == "AGB_ESA"), c(1, 4)],
                         # Coeffs[which(rownames(Coeffs) == "AGB_ESA:SEASONJJA"), c(1, 4)],
                         Coeffs[which(rownames(Coeffs) == "AGB_ESA"), 1] + Coeffs[which(rownames(Coeffs) == "AGB_ESA:SEASONJJA"), 1],
                         Coeffs[which(rownames(Coeffs) == "AGB_ESA:SEASONJJA"), 4],
@@ -168,44 +169,94 @@ lapply(Fs, FUN = function(FIter) {
             cbind(x$Location, Ret)
         }))
         plot_df <- na.omit(plot_df)
+        ## removing outliers
+        Quants <- quantile(plot_df$Value[grepl("Estimate", plot_df$Variable)], probs = c(0.05, 0.95))
+        plot_df$Value[plot_df$Value < Quants[1] & grepl("Estimate", plot_df$Variable)] <- NA
+        plot_df$Value[plot_df$Value > Quants[2] & grepl("Estimate", plot_df$Variable)] <- NA
+        plot_df <- na.omit(plot_df)
 
-        NumStat <- ggplot() +
+        if (nrow(plot_df) / 7 > 1e5) { ## safe to assume we are dealing with closely clustered points
+            GridFlag <- TRUE
+        } else {
+            GridFlag <- FALSE
+        }
+
+        # Pre-filter datasets
+        stat_data <- filter(plot_df, Variable == "Number of Stations")
+        data_data <- filter(plot_df, Variable == "Number of Data Points")
+        r2_data <- filter(plot_df, Variable == "R2")
+
+        # Shared base map
+        base_map <- ggplot() +
             geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
-            geom_point(data = plot_df[plot_df$Variable == "Number of Stations", ], aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
-            theme_bw() +
+            theme_bw()
+
+        # Number of Stations Plot
+        NumStat <- base_map +
+            (if (GridFlag) {
+                geom_tile(data = stat_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value))
+            } else {
+                geom_point(data = stat_data, aes(x = LONGITUDE, y = LATITUDE, col = Value))
+            }) +
             labs(title = "Number of Stations")
 
-        NumData <- ggplot() +
-            geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
-            geom_point(data = plot_df[plot_df$Variable == "Number of Data Points", ], aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
-            theme_bw() +
+        # Number of Data Points Plot
+        NumData <- base_map +
+            (if (GridFlag) {
+                geom_tile(data = data_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value))
+            } else {
+                geom_point(data = data_data, aes(x = LONGITUDE, y = LATITUDE, col = Value))
+            }) +
             labs(title = "Number of Data Points")
 
-        RS2 <- ggplot() +
-            geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
-            geom_point(data = plot_df[plot_df$Variable == "R2", ], aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
-            theme_bw() +
-            labs(title = "Model R quared")
+        # Model R Squared Plot
+        RS2 <- base_map +
+            (if (GridFlag) {
+                geom_tile(data = r2_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value))
+            } else {
+                geom_point(data = r2_data, aes(x = LONGITUDE, y = LATITUDE, col = Value))
+            }) +
+            labs(title = "Model R squared")
 
         check <- c(
             list(
                 plot_grid(NumStat, NumData, RS2, ncol = 3)
             ),
             lapply(c("(Winter)", "(Summer)"), FUN = function(Season) {
-                PValues <- ggplot() +
+                pval_data <- filter(plot_df, Variable == paste("P-Value", Season))
+                est_data <- filter(plot_df, Variable == paste("Estimate", Season))
+
+                # Common map layer
+                base_map <- ggplot() +
                     geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
-                    geom_point(data = plot_df[plot_df$Variable == paste("P-Value", Season), ], aes(x = LONGITUDE, y = LATITUDE, col = Value < 0.05)) +
-                    theme_bw() +
+                    theme_bw()
+
+                # P-Values Plot
+                PValues <- base_map +
+                    (if (GridFlag) {
+                        geom_tile(data = pval_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value < 0.05))
+                    } else {
+                        geom_point(data = pval_data, aes(x = LONGITUDE, y = LATITUDE, col = Value < 0.05))
+                    }) +
                     labs(title = paste("P-values", Season))
 
-                Estimates <- ggplot() +
-                    geom_sf(data = Countries_sf, colour = "black", fill = "#999177") +
-                    geom_point(data = plot_df[plot_df$Variable == paste("Estimate", Season), ], aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
-                    scale_colour_gradient2(low = "darkblue", high = "darkgreen") +
-                    theme_bw() +
+                # Estimates Plot
+                Estimates <- base_map +
                     labs(title = paste("Estimates", Season))
 
-                Distrib <- ggplot(data = plot_df[plot_df$Variable == paste("Estimate", Season), ], aes(x = Value)) +
+                # Add layers based on GridFlag
+                if (GridFlag) {
+                    Estimates <- Estimates +
+                        geom_tile(data = est_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value)) +
+                        scale_fill_gradient2(low = "darkblue", high = "darkgreen", midpoint = median(est_data$Value, na.rm = TRUE))
+                } else {
+                    Estimates <- Estimates +
+                        geom_point(data = est_data, aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
+                        scale_colour_gradient2(low = "darkblue", high = "darkgreen", midpoint = median(est_data$Value, na.rm = TRUE))
+                }
+
+                # Distribution Plot (not affected by GridFlag)
+                Distrib <- ggplot(est_data, aes(x = Value)) +
                     stat_halfeye() +
                     theme_bw() +
                     labs(title = paste("Estimates", Season))
