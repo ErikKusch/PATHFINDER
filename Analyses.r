@@ -117,7 +117,7 @@ lapply(Fs, FUN = function(FIter) {
 ## Location-Specific Models -----------------------------------------------
 message("+++ Location-Specific Models +++")
 LocSpec_ls <- lapply(Fs, FUN = function(FIter) {
-    # FIter <- Fs[1]
+    # FIter <- Fs[2]
     NameIter <- gsub(pattern = "_df", replacement = "", gsub(tools::file_path_sans_ext(basename(FIter)), pattern = "Data_", replacement = ""))
     FNAME <- file.path(Dir.EmulatorData, paste0("EmulatorResults_", NameIter, "_LocationSpecific.RData"))
     print(paste("--- Scale:", NameIter))
@@ -137,20 +137,31 @@ LocSpec_ls <- lapply(Fs, FUN = function(FIter) {
         if ("VARIABLE" %in% colnames(ModelData_df)) {
             ModelData_df <- ModelData_df[ModelData_df$VARIABLE == "TAVG", ]
         }
-        Locs_df <- ModelData_df[, c("LATITUDE", "LONGITUDE")]
-        ULocs_df <- unique(Locs_df)
+        if("CELL" %in% colnames(ModelData_df)){ # for gridded data, we do not use windows, but treat each cell as its own area
+            ULocs_df <- unique(ModelData_df[, c("CELL", "LATITUDE", "LONGITUDE")])
+            # data.frame(CELL = unique(ModelData_df$CELL))
+        }else{
+            Locs_df <- ModelData_df[, c("LATITUDE", "LONGITUDE")]
+            ULocs_df <- unique(Locs_df)
+        }
 
-        Locs_ls <- pblapply(1:nrow(ULocs_df), cl = 50, FUN = function(LocIter) {
+        Locs_ls <- pblapply(1:nrow(ULocs_df), FUN = function(LocIter) {
+            # print(LocIter)
             # LocIter <- c(LATITUDE =  45.3667, LONGITUDE =  28.85)
             ## subset for location
             LocIter <- ULocs_df[LocIter, ]
             # print(LocIter)
-            max_distance <- 25000 # 25 km
-            ModelData_df$distance_m <- distHaversine( ## calculate distance in m
-                p1 = Locs_df,
-                p2 = LocIter
-            )
-            Loc_df <- subset(ModelData_df, distance_m <= max_distance) # subset for maximum distance
+            if("CELL" %in% colnames(LocIter)){ # for gridded data, we do not use windows, but treat each cell as its own area
+                Loc_df <- ModelData_df[which(ModelData_df$CELL == LocIter$CELL), ]
+            }else{
+                max_distance <- 25000 # 25 km
+                ModelData_df$distance_m <- distHaversine( ## calculate distance in m
+                    p1 = Locs_df,
+                    p2 = LocIter
+                )
+                Loc_df <- subset(ModelData_df, distance_m <= max_distance) # subset for maximum distance
+            }
+            # print("Subsetted")
 
             ## analysis
             # print(LocIter)
@@ -196,3 +207,11 @@ LocSpec_ls <- lapply(Fs, FUN = function(FIter) {
     }
     Locs_ls
 })
+
+
+
+
+
+
+
+
