@@ -19,6 +19,8 @@ install.load.package <- function(x) {
 }
 ### CRAN PACKAGES ----
 package_vec <- c(
+    "ggpubr", # for easy ggarrange
+    "pbapply", # for progress bar
     "terra", # for spatraster operations
     "sf", # for polygon handling
     "ggplot2", # for plotting
@@ -143,6 +145,7 @@ Fs <- list.files(pattern = "EmulatorResults")
 
 lapply(Fs, FUN = function(FIter) {
     # FIter <- Fs[3]
+    print(FIter)
     load(FIter)
     ScaleName <- tools::file_path_sans_ext(gsub(pattern = "EmulatorResults_", replacement = "", FIter))
     if (grepl("_LocationSpecific", ScaleName)) {
@@ -196,27 +199,28 @@ lapply(Fs, FUN = function(FIter) {
             (if (GridFlag) {
                 geom_tile(data = stat_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value))
             } else {
-                geom_point(data = stat_data, aes(x = LONGITUDE, y = LATITUDE, col = Value))
+                geom_point(data = stat_data, aes(x = LONGITUDE, y = LATITUDE, col = as.factor(Value)))
             }) +
-            labs(title = "Number of Stations")
+            labs(title = "Number of Stations", col = "Value")
 
         # Number of Data Points Plot
         NumData <- base_map +
             (if (GridFlag) {
                 geom_tile(data = data_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value))
             } else {
-                geom_point(data = data_data, aes(x = LONGITUDE, y = LATITUDE, col = Value))
+                geom_point(data = data_data, aes(x = LONGITUDE, y = LATITUDE, col = log(Value)))
             }) +
-            labs(title = "Number of Data Points")
+            labs(title = "Number of Data Points", col = paste(ifelse(!GridFlag, "Log", ""), "Value"))
 
         # Model R Squared Plot
-        RS2 <- base_map +
-            (if (GridFlag) {
-                geom_tile(data = r2_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value))
-            } else {
-                geom_point(data = r2_data, aes(x = LONGITUDE, y = LATITUDE, col = Value))
-            }) +
-            labs(title = "Model R squared")
+        (if (GridFlag) {
+            RS2 <- base_map + geom_tile(data = r2_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value)) +
+                scale_fill_gradient2(low = "darkred", high = "darkgreen", midpoint = 0.5)
+        } else {
+            RS2 <- base_map + geom_point(data = r2_data, aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
+                scale_colour_gradient2(low = "darkred", high = "darkgreen", midpoint = 0.5)
+        })
+        RS2 <- RS2 + labs(title = "Model R squared")
 
         check <- c(
             list(
@@ -232,13 +236,12 @@ lapply(Fs, FUN = function(FIter) {
                     theme_bw()
 
                 # P-Values Plot
-                PValues <- base_map +
-                    (if (GridFlag) {
-                        geom_tile(data = pval_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value < 0.05))
-                    } else {
-                        geom_point(data = pval_data, aes(x = LONGITUDE, y = LATITUDE, col = Value < 0.05))
-                    }) +
-                    labs(title = paste("P-values", Season))
+                (if (GridFlag) {
+                    PValues <- base_map + geom_tile(data = pval_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value < 0.05)) + scale_fill_manual(values = c("TRUE" = "darkgreen", "FALSE" = "darkred"))
+                } else {
+                    PValues <- base_map + geom_point(data = pval_data, aes(x = LONGITUDE, y = LATITUDE, col = Value < 0.05)) + scale_colour_manual(values = c("TRUE" = "darkgreen", "FALSE" = "darkred"))
+                })
+                PValues <- PValues + labs(title = paste("P-values", Season))
 
                 # Estimates Plot
                 Estimates <- base_map +
@@ -248,17 +251,24 @@ lapply(Fs, FUN = function(FIter) {
                 if (GridFlag) {
                     Estimates <- Estimates +
                         geom_tile(data = est_data, aes(x = LONGITUDE, y = LATITUDE, fill = Value)) +
-                        scale_fill_gradient2(low = "darkblue", high = "darkgreen", midpoint = median(est_data$Value, na.rm = TRUE))
+                        scale_fill_gradient2(
+                            low = "darkblue", high = "darkgreen", midpoint = median(est_data$Value, na.rm = TRUE),
+                            limits = quantile(est_data$Value, probs = c(0.05, 0.95)), oob = scales::squish
+                        )
                 } else {
                     Estimates <- Estimates +
                         geom_point(data = est_data, aes(x = LONGITUDE, y = LATITUDE, col = Value)) +
-                        scale_colour_gradient2(low = "darkblue", high = "darkgreen", midpoint = median(est_data$Value, na.rm = TRUE))
+                        scale_colour_gradient2(
+                            low = "darkblue", high = "darkgreen", midpoint = median(est_data$Value, na.rm = TRUE),
+                            limits = quantile(est_data$Value, probs = c(0.05, 0.95)), oob = scales::squish
+                        )
                 }
 
                 # Distribution Plot (not affected by GridFlag)
                 Distrib <- ggplot(est_data, aes(x = Value)) +
                     stat_halfeye() +
                     theme_bw() +
+                    geom_vline(xintercept = 0) +
                     labs(title = paste("Estimates", Season))
 
                 plot_grid(Estimates, Distrib, PValues, ncol = 3)
