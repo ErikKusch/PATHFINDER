@@ -144,7 +144,7 @@ ggsave(CERRA_gg, file = "CERRA.png", width = 16, height = 16, unit = "cm", limit
 Fs <- list.files(pattern = "EmulatorResults")
 
 lapply(Fs, FUN = function(FIter) {
-    # FIter <- Fs[3]
+    # FIter <- Fs[5]
     print(FIter)
     load(FIter)
     ScaleName <- tools::file_path_sans_ext(gsub(pattern = "EmulatorResults_", replacement = "", FIter))
@@ -274,7 +274,7 @@ lapply(Fs, FUN = function(FIter) {
                 plot_grid(Estimates, Distrib, PValues, ncol = 3)
             })
         )
-        ggsave(plot_grid(plotlist = check, ncol = 1), file = paste0(ScaleName, ".png"), width = 16 * 3, height = 16 * 3, unit = "cm")
+        ggsave(plot_grid(plotlist = check, ncol = 1), file = paste0(ScaleName, ".png"), width = 16 * 2.2, height = 16 * 2.2, unit = "cm")
     } else {
         ## Annual Results
         AnnualPlot_df <- do.call(rbind, lapply(names(Outcome_ls), FUN = function(OutcomeIter) {
