@@ -39,6 +39,10 @@ Dir.EmulatorData <- "/div/no-backup-nac/PATHFINDER/EMULATOR-DATA"
 if (!dir.exists(Dir.EmulatorData)) {
     dir.create(Dir.EmulatorData)
 }
+Dir.EmulatorDataCERRA <- file.path(Dir.EmulatorData, "CERRA")
+if (!dir.exists(Dir.EmulatorDataCERRA)) {
+    dir.create(Dir.EmulatorDataCERRA)
+}
 
 ## Functionality ------------------------------------------------------------
 source("EmulatorReadying.r")
@@ -104,5 +108,67 @@ Data_5km_df <- do.call(rbind, Extract_ls)
 ## Adding Derived Information ---------------------------------------------
 Data_5km_df <- EmulatorReadying(Data_5km_df)
 Data_5km_df <- na.omit(Data_5km_df)
+
 write.csv(Data_5km_df, file.path(Dir.EmulatorData, "Data_5km_df.csv"))
 saveRDS(Data_5km_df, file.path(Dir.EmulatorData, "Data_5km_df.rds"))
+
+### Paralel Processing Preparations ---------------------------------------
+## Readying for Moving Window
+Data_5km_df$AGB_ESA <- unlist(Data_5km_df$AGB_ESA)
+Data_5km_df$YEAR <- substr(Data_5km_df$YEAR_MONTH, 1, 4)
+Data_5km_df$MONTH <- substr(Data_5km_df$YEAR_MONTH, 6, 7)
+Data_5km_df <- na.omit(Data_5km_df)
+
+## subset here for each location and its surrounding information
+ULocs_df <- unique(Data_5km_df[, c("CELL", "LATITUDE", "LONGITUDE")])
+lat_step <- min(diff(sort(unique(ULocs_df$LATITUDE)))) * 1.5
+lon_step <- min(diff(sort(unique(ULocs_df$LONGITUDE)))) * 1.5
+
+# Helper function to find neighbors
+find_neighbors <- function(cell_row, all_cells, lat_step, lon_step) {
+    lat <- cell_row$LATITUDE
+    lon <- cell_row$LONGITUDE
+
+    # Define bounding box for 3x3 neighborhood
+    lat_range <- c(lat - lat_step, lat, lat + lat_step)
+    lon_range <- c(lon - lon_step, lon, lon + lon_step)
+
+    # Find all cells within that 3x3 box
+    neighbors <- all_cells$CELL[all_cells$LATITUDE <= lat_range[3] & all_cells$LATITUDE >= lat_range[1] &
+    all_cells$LONGITUDE <= lon_range[3] & all_cells$LONGITUDE >= lon_range[1]]
+
+    # print(length(neighbors))
+    return(neighbors)
+}
+# Apply function to each row
+neighbor_list <- pbapply(ULocs_df, 1, function(row) {
+    find_neighbors(as.list(row), ULocs_df, lat_step, lon_step)
+})
+# Attach the neighbors to our data
+ULocs_df$neighbors <- neighbor_list
+
+## figure out target cells (those that have non-zero AGB in ESA data)
+non_zero_agb <- Data_5km_df$AGB_ESA != 0
+non_zero_agb_count <- tapply(non_zero_agb, Data_5km_df$CELL, sum, na.rm = TRUE)
+non_zero_agb_df <- data.frame(
+    CELL = names(non_zero_agb_count),
+    non_zero_agb_count = as.integer(non_zero_agb_count)
+)
+
+## split into individuals files for parallel processing
+pbsapply(non_zero_agb_df$CELL[non_zero_agb_df$non_zero_agb_count != 0], 
+    cl = 5, 
+    FUN = function(LocIter) {
+        print(LocIter)
+    ## subset for location
+    LocIter <- ULocs_df[ULocs_df$CELL == LocIter, ]
+    FNAME <- file.path(Dir.EmulatorDataCERRA, paste0("CERRA_", LocIter$CELL, ".rds"))
+    if(!file.exists(FNAME)){
+        ## subset data for location and its neighbours
+        Loc_df <- Data_5km_df[which(Data_5km_df$CELL %in%  unlist(LocIter$neighbors)), ]
+        Loc_df <- Loc_df[ , c("CELL", "LONGITUDE", "LATITUDE", "YEAR_MONTH",
+                              "mean", "min", "max", "ELEVATION", "AGB_ESA")]
+        ## Saving data
+        saveRDS(Loc_df, FNAME)
+    }
+})
