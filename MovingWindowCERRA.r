@@ -28,6 +28,9 @@ sapply(package_vec, install.load.package)
 ## Directories ------------------------------------------------------------
 Dir.Base <- getwd()
 Dir.EmulatorData <- "/div/no-backup-nac/PATHFINDER/EMULATOR-DATA"
+Dir.EmulatorDataCERRA <- file.path(Dir.EmulatorData, "CERRA")
+Dir.EmulatorResults <- file.path(Dir.EmulatorData, "EmulatorResults")
+if (!dir.exists(Dir.EmulatorResults)) dir.create(Dir.EmulatorResults)
 
 # DATA ====================================================================
 message("####### Registering Data Files")
@@ -45,91 +48,67 @@ if (file.exists(FNAME)) {
     load(FNAME)
 } else {
         print("Compiling")
-        ModelData_df <- readRDS(FIter) # ModelData_ls[[NameIter]]
-        ## some more changes to the data frames
-        ModelData_df$AGB_ESA <- unlist(ModelData_df$AGB_ESA)
-        ModelData_df$YEAR <- substr(ModelData_df$YEAR_MONTH, 1, 4)
-        ModelData_df$MONTH <- substr(ModelData_df$YEAR_MONTH, 6, 7)
-        ModelData_df <- na.omit(ModelData_df)
+        # unlink(list.files(Dir.EmulatorData, pattern = "CERRA_", full.names = TRUE))
+        FS <- list.files(Dir.EmulatorDataCERRA, full.names = FALSE)
+        # file.copy(from=file.path(Dir.EmulatorData, FS), to= file.path(Dir.EmulatorDataCERRA, FS), 
+        #   overwrite = TRUE, recursive = FALSE, 
+        #   copy.mode = TRUE)
 
-        ## subset here for each location and its surrounding information
-        ULocs_df <- unique(ModelData_df[, c("CELL", "LATITUDE", "LONGITUDE")])
-        lat_step <- min(diff(sort(unique(ULocs_df$LATITUDE)))) * 1.5
-        lon_step <- min(diff(sort(unique(ULocs_df$LONGITUDE)))) * 1.5
+        library(parallel)
+        cl <- makeCluster(42L)
+        clusterExport(cl, c("FS", "Dir.EmulatorDataCERRA", "Dir.EmulatorResults"))
 
-        
+        Results_ls <- pblapply(rev(FS), 
+                            cl = cl, 
+                            FUN = function(LocIter) {
+            # message(LocIter)
+            FRESULTS <- file.path(Dir.EmulatorResults, gsub(".rds", "_Results.rds", LocIter))
+            if(file.exists(FRESULTS)){
+                print("compiled")
+                Ret_ls <- readRDS(FRESULTS)
+            }else{
+                print("compiling")
+                Loc_df <- readRDS(file.path(Dir.EmulatorDataCERRA, LocIter))
 
-# Helper function to find neighbors
-find_neighbors <- function(cell_row, all_cells, lat_step, lon_step) {
-  lat <- cell_row$LATITUDE
-  lon <- cell_row$LONGITUDE
-  
-  # Define bounding box for 3x3 neighborhood
-  lat_range <- c(lat - lat_step, lat, lat + lat_step)
-  lon_range <- c(lon - lon_step, lon, lon + lon_step)
-  
-  # Find all cells within that 3x3 box
-    neighbors <- all_cells$CELL[all_cells$LATITUDE <= lat_range[3] & all_cells$LATITUDE >= lat_range[1] &
-    all_cells$LONGITUDE <= lon_range[3] & all_cells$LONGITUDE >= lon_range[1]]
-
-#   neighbors <- all_cells %>%
-#     dplyr::filter(LATITUDE %in% lat_range, LONGITUDE %in% lon_range)
-#   print(length(neighbors))
-  return(neighbors)
-}
-
-# Apply function to each row
-neighbor_list <- pbapply(ULocs_df, 1, function(row) {
-  find_neighbors(as.list(row), ULocs_df, lat_step, lon_step)
-})
-
-# Attach the neighbors to your data
-ULocs_df$neighbors <- neighbor_list
-
-
-
-        Locs_ls <- pblapply(1:nrow(ULocs_df), FUN = function(LocIter) {
-            print(LocIter)
-            # LocIter <- c(LATITUDE =  45.3667, LONGITUDE =  28.85)
-            ## subset for location
-            LocIter <- ULocs_df[LocIter, ]
-            # print(LocIter)
-            # if("CELL" %in% colnames(LocIter)){ # for gridded data, we do not use windows, but treat each cell as its own area
-                Loc_df <- ModelData_df[which(ModelData_df$CELL %in%  unlist(LocIter$neighbors)), ]
-            # }else{
-            #     max_distance <- 25000 # 25 km
-            #     ModelData_df$distance_m <- distHaversine( ## calculate distance in m
-            #         p1 = Locs_df,
-            #         p2 = LocIter
+            Loc_df$SEASON <- sapply(Loc_df$YEAR_MONTH, FUN = function(x){
+                x <- substr(x, 6, 7)
+                if(x %in% c("03", "04", "05")){
+                    Ret <- "MAM"
+                }
+                if(x %in% c("06", "07", "08")){
+                    Ret <- "JJA"
+                }
+                if(x %in% c("09", "10", "11")){
+                    Ret <- "SON"
+                }
+                if(x %in% c("12", "01", "02")){
+                    Ret <- "DJF"
+                }
+                Ret
+            })
+            
+            # if (length(unique(Loc_df$SEASON)) < 4 | all(tapply(Loc_df$AGB_ESA, Loc_df$SEASON, function(x) length(unique(x))) < 2)) {
+            #     ## export of objects
+            #     list(
+            #         Location = LocIter,
+            #         NumLocs = length(unique(Loc_df$STATION)),
+            #         NumMeasures = nrow(Loc_df),
+            #         Models = list(
+            #             Base = list(
+            #                 estimates = NA,
+            #                 RS2 = NA
+            #             ),
+            #             Seasons = list(
+            #                 estimates = NA,
+            #                 RS2 = NA
+            #             )
+            #         )
             #     )
-            #     Loc_df <- subset(ModelData_df, distance_m <= max_distance) # subset for maximum distance
-            # }
-            # print("Subsetted")
-
-            ## analysis
-            # print(LocIter)
-            if (length(unique(Loc_df$SEASON)) < 4 | all(tapply(Loc_df$AGB_ESA, Loc_df$SEASON, function(x) length(unique(x))) < 2)) {
-                ## export of objects
-                list(
-                    Location = LocIter,
-                    NumLocs = length(unique(Loc_df$STATION)),
-                    NumMeasures = nrow(Loc_df),
-                    Models = list(
-                        Base = list(
-                            estimates = NA,
-                            RS2 = NA
-                        ),
-                        Seasons = list(
-                            estimates = NA,
-                            RS2 = NA
-                        )
-                    )
-                )
-            } else {
+            # } else {
                 Basemod <- lm(mean ~ AGB_ESA + ELEVATION, data = Loc_df)
                 Seasonmod <- lm(mean ~ AGB_ESA + AGB_ESA:SEASON + ELEVATION, data = Loc_df) #  lm(mean ~ 0 + AGB_ESA:SEASON + ELEVATION, data = Loc_df)
                 ## export of objects
-                list(
+                Ret_ls <- list(
                     Location = LocIter,
                     NumLocs = length(unique(Loc_df$STATION)),
                     NumMeasures = nrow(Loc_df),
@@ -144,8 +123,16 @@ ULocs_df$neighbors <- neighbor_list
                         )
                     )
                 )
+                saveRDS(Ret_ls, file = FRESULTS)
             }
+            Ret_ls
         })
-        save(Locs_ls, file = FNAME)
+
+        stopCluster(cl)
+        closeAllConnections()
+        stop("Save results")
+
+        Results_ls
+        # save(Locs_ls, file = FNAME)
     }
-    Locs_ls
+    # Locs_ls
