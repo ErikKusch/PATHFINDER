@@ -64,10 +64,10 @@ if (file.exists(FNAME)) {
             # message(LocIter)
             FRESULTS <- file.path(Dir.EmulatorResults, gsub(".rds", "_Results.rds", LocIter))
             if(file.exists(FRESULTS)){
-                print("compiled")
+                # print("compiled")
                 Ret_ls <- readRDS(FRESULTS)
             }else{
-                print("compiling")
+                # print("compiling")
                 Loc_df <- readRDS(file.path(Dir.EmulatorDataCERRA, LocIter))
 
             Loc_df$SEASON <- sapply(Loc_df$YEAR_MONTH, FUN = function(x){
@@ -86,30 +86,17 @@ if (file.exists(FNAME)) {
                 }
                 Ret
             })
-            
-            # if (length(unique(Loc_df$SEASON)) < 4 | all(tapply(Loc_df$AGB_ESA, Loc_df$SEASON, function(x) length(unique(x))) < 2)) {
-            #     ## export of objects
-            #     list(
-            #         Location = LocIter,
-            #         NumLocs = length(unique(Loc_df$STATION)),
-            #         NumMeasures = nrow(Loc_df),
-            #         Models = list(
-            #             Base = list(
-            #                 estimates = NA,
-            #                 RS2 = NA
-            #             ),
-            #             Seasons = list(
-            #                 estimates = NA,
-            #                 RS2 = NA
-            #             )
-            #         )
-            #     )
-            # } else {
+
+            numbers <- gregexpr("[0-9]+", LocIter)
+            result <- regmatches(LocIter, numbers)
+            Loc <- as.numeric(unlist(result))
+            Coords <- Loc_df[which(head(Loc_df$CELL, 30) == Loc)[1], c("CELL", "LONGITUDE", "LATITUDE")]
+
                 Basemod <- lm(mean ~ AGB_ESA + ELEVATION, data = Loc_df)
                 Seasonmod <- lm(mean ~ AGB_ESA + AGB_ESA:SEASON + ELEVATION, data = Loc_df) #  lm(mean ~ 0 + AGB_ESA:SEASON + ELEVATION, data = Loc_df)
                 ## export of objects
                 Ret_ls <- list(
-                    Location = LocIter,
+                    Location = Coords,
                     NumLocs = length(unique(Loc_df$STATION)),
                     NumMeasures = nrow(Loc_df),
                     Models = list(
@@ -130,9 +117,44 @@ if (file.exists(FNAME)) {
 
         stopCluster(cl)
         closeAllConnections()
-        stop("Save results")
 
-        Results_ls
-        # save(Locs_ls, file = FNAME)
+        Results2_ls <- pblapply(Results_ls, FUN = function(x){ # this needs rework to fit with Coords export above
+            R2 <- x$Models$Seasons$RS2
+            Estimates <- x$Models$Seasons$estimates[,1]
+            PVals <- x$Models$Seasons$estimates[,4]
+            numbers <- gregexpr("[0-9]+", x$Location)
+            result <- regmatches(x$Location, numbers)
+            Loc <- as.numeric(unlist(result))
+
+            Ret <- cbind(
+                data.frame(
+                    CELL = Loc, 
+                    RS2 = R2
+                    ),
+                t(Estimates),
+                t(PVals)
+            )
+            colnames(Ret) <- c("CELL", "R2", names(Estimates), paste0("p_", names(Estimates)))
+            Ret[, -grep(colnames(Ret), pattern = "ELEVATION")]
+        })
+        Results_df <- do.call(rbind, Results2_ls)
+
+        Locs_df <- do.call(rbind, pblapply(rev(FS), # this should be lifted into calculations above!!
+                            # cl = cl, 
+                            FUN = function(LocIter) {
+                                Loc_df <- readRDS(file.path(Dir.EmulatorDataCERRA, LocIter))
+                                numbers <- gregexpr("[0-9]+", LocIter)
+                                result <- regmatches(LocIter, numbers)
+                                Loc <- as.numeric(unlist(result))
+                                Loc_df[which(head(Loc_df$CELL, 30) == Loc)[1], c("CELL", "LONGITUDE", "LATITUDE")]
+                            }))
+
+        ResultsMW_df <- merge(Results_df, Locs_df, by = "CELL")
+
+        
+        save( ResultsMW_df, file = FNAME)
     }
     # Locs_ls
+
+
+250
