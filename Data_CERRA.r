@@ -28,7 +28,7 @@ install.load.package <- function(x) {
 
 ### NON-CRAN PACKAGES ----
 if ("ClimHub" %in% rownames(installed.packages()) == FALSE) { # ClimHub check
-    devtools::install_github("ErikKusch/ClimHub")
+    devtools::install_github("Clim-Hub/ClimHub")
 }
 library(ClimHub)
 # package_vec <- c("ClimHub", package_vec)
@@ -37,7 +37,8 @@ source("PersonalSettings.R")
 ## Directories ------------------------------------------------------------
 ### Define directories in relation to project directory
 Dir.Base <- getwd() # identifying the current directory
-Dir.CERRA <- "/div/no-backup-nac/PATHFINDER/CERRA"
+Dir.CERRA <- file.path(Dir.Base, "CERRA") # set to project directory
+# Dir.CERRA <- "/div/no-backup-nac/PATHFINDER/CERRA"
 if (!dir.exists(Dir.CERRA)) {
     dir.create(Dir.CERRA)
 }
@@ -45,7 +46,9 @@ if (!dir.exists(Dir.CERRA)) {
 # DATA ====================================================================
 Meta_vec <- c(DOI = "10.24381/cds.622a565a", CITATION = "Schimanke S., Ridal M., Le Moigne P., Berggren L., Undén P., Randriamampianina R., Andrea U., Bazile E., Bertelsen A., Brousseau P., Dahlgren P., Edvinsson L., El Said A., Glinton M., Hopsch S., Isaksson L., Mladek R., Olsson E., Verrelle A., Wang Z.Q., (2021): CERRA sub-daily regional reanalysis data for Europe on single levels from 1984 to present. Copernicus Climate Change Service (C3S) Climate Data Store (CDS), DOI: 10.24381/cds.622a565a.", Project = "PATHFINDER", Handler = "Erik Kusch")
 
-CERRA_ls <- lapply(2015:2023, FUN = function(YearIter) {
+## TEMPERATURE ------------------------------------------------------------
+message("2m temperature")
+CERRA_ls <- lapply(2015:2022, FUN = function(YearIter) {
     message(YearIter)
     FileName <- paste0("CERRA_max_", YearIter, ".nc")
 
@@ -100,7 +103,7 @@ CERRA_ls <- lapply(2015:2023, FUN = function(YearIter) {
                 NC = CERRA_Year2_ls[[x]],
                 FName = file.path(Dir.CERRA, paste0(names(CERRA_Year2_ls)[[x]], "_", YearIter, ".nc")),
                 Variable = "2m temperature",
-                LongVar = paste(tools::file_path_sans_ext(names(CERRA_Year2_ls)[[x]]), "monthly air temperature"),
+                LongVar = paste(tools::file_path_sans_ext(names(CERRA_Year2_ls)[[x]]), "daily air temperature"),
                 Unit = "C",
                 Attrs = Meta_vec, Write = TRUE, Compression = 9
             )
@@ -118,6 +121,82 @@ CERRA_rasts_ls <- lapply(names(CERRA_ls[[1]]), FUN = function(x) {
     ClimHub:::WriteRead.NC(
         NC = CERRA_iter,
         FName = file.path(Dir.CERRA, paste0("CERRA_", x, ".nc")),
+        Variable = "2m temperature",
+        LongVar = paste(x, "daily air temperature"),
+        Unit = "C",
+        Attrs = Meta_vec, Write = TRUE, Compression = 9
+    )
+    unlink(terra::sources(CERRA_iter))
+})
+
+
+## COVARIATES -------------------------------------------------------------
+Vars_vec <- c("Total precipitation")
+MetaVars_df <- Meta.Variables("CDS_reanalysis-cerra-single-levels")
+# MetaVars_df$name
+
+MetaVars_df[which(MetaVars_df$name == VarIter), ]
+
+Var_ls <- lapply(Vars_vec, FUN = function(VarIter) {
+    message(VarIter)
+    CERRA_ls <- lapply(2015:2022, FUN = function(YearIter) {
+        message(YearIter)
+        FileName <- paste0("CERRA_", VarIter, "_", YearIter, ".nc")
+
+        if (file.exists(file.path(Dir.CERRA, FileName))) {
+            print("Already prepared")
+            terra::rast(file.path(Dir.CERRA, FileName))
+        } else {
+            CERRA_analysis_rast <- Download.reanalysis_cerra_single_levels(
+                # CDS API call specification
+                Variable = VarIter,
+                LevelType = MetaVars_df$`level type`[which(MetaVars_df$name == VarIter)],
+                SoilLayer = "",
+                DataType = MetaVars_df[which(MetaVars_df$name == VarIter), "data type"],
+                ProductType = MetaVars_df[which(MetaVars_df$name == VarIter), "product type"],
+                LeadTimeHour = "1",
+                # time-window, default set to range of dataset-type
+                DateStart = paste0(YearIter, "-01-01 01:00"),
+                DateStop = paste0(YearIter, "-12-31 22:00"),
+                TimeZone = "CET",
+                # file naming and output
+                Dir = Dir.CERRA,
+                FileName = FileName,
+                Compression = NA,
+                WriteFile = FALSE,
+                RemoveTemporary = FALSE,
+                # API credentials
+                API_User = API_User,
+                API_Key = API_Key,
+                # Quality of life and efficiency settings
+                TChunkSize = 6000,
+                closeConnections = TRUE
+            )
+
+            CERRA_mean <- Temporal.Aggregration(CERRA_analysis_rast, TResolution = "day", TStep = 1, FUN = mean)
+
+            Repro <- Spatial.Reproject(CERRA_mean, ProjTo = 4326)
+            CERRA_save <- Spatial.CropMask(Repro, terra::ext(c(-10, 30, 35, 70)))
+
+            terra::time(CERRA_save) <- as.POSIXct(terra::time(CERRA_save), "CET")
+            CERRA_save <- ClimHub:::WriteRead.NC(
+                NC = CERRA_save,
+                FName = FileName,
+                Variable = VarIter,
+                LongVar = paste("CERRA", YearIter, "daily", VarIter),
+                Unit = MetaVars_df$unit[which(MetaVars_df$name == VarIter)],
+                Attrs = Meta_vec, Write = TRUE, Compression = 9
+            )
+            unlink(list.files(Dir.CERRA, pattern = "TEMP_0000", full.names = TRUE))
+
+            CERRA_save
+        }
+    })
+
+    CERRA_all <- do.call(c, lapply(CERRA_ls, "[[", x))
+    ClimHub:::WriteRead.NC(
+        NC = CERRA_all,
+        FName = file.path(Dir.CERRA, paste0("CERRA_", YearIter, ".nc")),
         Variable = "2m temperature",
         LongVar = paste(x, "daily air temperature"),
         Unit = "C",
