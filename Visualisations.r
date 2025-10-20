@@ -141,7 +141,7 @@ CERRA_gg <- Plot.SpatRast(CERRA_rast, SF = Countries_sf)
 ggsave(CERRA_gg, file = "CERRA.png", width = 16, height = 16, unit = "cm", limitsize = FALSE)
 
 # MODEL COEFFICIENTS ======================================================
-Fs <- list.files(pattern = "EmulatorResults")
+Fs <- list.files(pattern = "EmulatorResults") # [c(1,2,5)]
 
 lapply(Fs, FUN = function(FIter) {
     # FIter <- Fs[5]
@@ -305,8 +305,8 @@ lapply(Fs, FUN = function(FIter) {
         Annual_gg <- ggplot(AnnualPlot_df, aes(x = Year, y = Estimate, shape = Pvalue < 0.05, col = Season, group = Season)) +
             geom_point() +
             geom_line() +
-            geom_label(aes(label = round(R2, 2), y = -0.001), col = "black") + # Override y aesthetic here
             geom_hline(yintercept = 0, lty = 2) +
+            geom_label(aes(label = round(R2, 2), y = -0.001), col = "black", fill = "white") + # Override y aesthetic here
             facet_wrap(~Outcome, ncol = 1, scales = "free") +
             theme_bw()
         ggsave(Annual_gg, file = paste0(ScaleName, "_Annual.png"), width = 16 * 2, height = 16 * 1.2, unit = "cm")
@@ -338,8 +338,8 @@ lapply(Fs, FUN = function(FIter) {
         Monthly_gg <- ggplot(MonthlyPlot_df, aes(x = Month, y = Estimate, shape = Pvalue < 0.05, group = 1)) +
             geom_point() +
             geom_line() +
-            geom_label(aes(label = round(R2, 2), y = -0.001), col = "black") + # Override y aesthetic here
             geom_hline(yintercept = 0) +
+            geom_label(aes(label = round(R2, 2), y = -0.001), col = "black", fill = "white") + # Override y aesthetic here
             facet_wrap(~Outcome, ncol = 1, scales = "free") +
             theme_bw()
         ggsave(Monthly_gg, file = paste0(ScaleName, "_Monthly.png"), width = 16 * 2, height = 16 * 1.2, unit = "cm")
