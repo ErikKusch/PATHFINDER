@@ -4,3 +4,6 @@ PersonalSettings.R
 GHCNQualityAssessment.r
 *.rds
 *.RData
+OldStuff/*
+CORINE/*
+CERRA/*
