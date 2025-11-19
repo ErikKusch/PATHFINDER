@@ -54,7 +54,7 @@ if (!is.null(FCheck)) {
     FNames <- file.path(Dir.ESA, paste0("ESA_TEMP", 2015:2022, ".nc"))
 
     FilestoLoad <- ClimHub:::Helper_DirectDownload(url = URLS, fileName = FNames, cores = 12)
-    ESA_rast <- ClimHub:::Helper.LoadFiles(FilestoLoad)
+    ESA_rast <- ClimHub:::Helper_LoadFiles(FilestoLoad)
 
     ### Cropping --------------------------------------------------------------
     ESA_rast <- Spatial_Limit(ESA_rast, terra::ext(c(-10, 30, 35, 70)))
