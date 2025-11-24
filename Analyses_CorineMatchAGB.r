@@ -82,10 +82,13 @@ CORINE_crop <- terra::crop(CORINE_rast, terra::ext(ESARepro_rast))
 CORINE_crop[is.na(ESARepro_rast)] <- NA # align NAs
 ESARepro_rast[is.na(CORINE_crop)] <- NA # align NAs
 
-terra::writeCDF(CORINE_crop, file = file.path(Dir.EmulatorData, "CORINE_Aligned.nc"), compression = 9)
-terra::writeCDF(ESARepro_rast, file = file.path(Dir.EmulatorData, "AGB_Aligned.nc"), compression = 9)
+EsaSafe <- Spatial_Reproject(ESARepro_rast, 4326)
+CORINESafe <- Spatial_Reproject(CORINE_crop, 4326)
+terra::writeCDF(EsaSafe, file = file.path(Dir.EmulatorData, "AGB_Aligned.nc"), compression = 9)
+terra::writeCDF(CORINESafe, file = file.path(Dir.EmulatorData, "CORINE_Aligned.nc"), compression = 9)
 
 ESARepro_rast <- ESARepro_rast[[1]]
+stop("rempve this stop")
 
 ## Binarising AGB data ----------------------------------------------------
 AGB_Bin <- ESARepro_rast > 0
