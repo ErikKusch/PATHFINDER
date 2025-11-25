@@ -211,34 +211,15 @@ units(AGBBinRatioNonNA_stack) <- units(AGBBinRatio_stack) <- "%"
 
 ##### CORINE Classifications as Frequencies -----
 print("CORINE Land Cover Classifications")
-vals <- extract(CORINE_rast, polys)   # no fun= argument!
+vals <- extract(CORINE_rast, polys)
 colnames(vals) <- c("ID", "CORINE")
-
-stop("which of these?!")
-freq2 <- vals %>%
-    group_by(ID, CORINE) %>%
-    summarise(freq = n(), .groups = "drop")
-
-freq2 <- vals %>%
-    group_by(ID, CORINE) %>%
-    summarise(freq = n(), .groups = "keep")
-
-freq3 <- table(Data$ID, Data$CORINE)
-
-freq_wide <- freq %>%
-    tidyr::pivot_wider(
-        names_from = test2,
-        values_from = freq,
-        values_fill = 0
-    )
-# convert data to matrix
-mat <- as.matrix(freq_wide[,-1])
+## extract frequencies
+freq <- table(vals$ID, vals$CORINE, useNA = "always")
+mat <- as.matrix(freq3)
 # make output raster with one layer per category
 CORINE_stack <- rast(CERRA_ls[[1]][[1]], nlyrs = ncol(mat))
-names(CORINE_stack) <- colnames(mat)
 # fill raster stack
 values(CORINE_stack) <- mat
-
 names(CORINE_stack) <- colnames(mat)
 varnames(CORINE_stack) <- colnames(mat)
 units(CORINE_stack) <- ""
