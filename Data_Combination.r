@@ -65,13 +65,13 @@ EmulatorReadying <- function(RawData_df) {
         Ret
     })
 
-    # Regions defined in-line with doi:10.1088/1748-9326/9/3/034002; might be better served with an overview of whether an area is predominantly boreal or deciduous forest; at present: everything is "North"
-    RawData_df$REGION <- pbsapply(RawData_df$LATITUDE, FUN = function(x) {
-        ifelse(x > 35, "North", "South")
-    })
+    # # Regions defined in-line with doi:10.1088/1748-9326/9/3/034002; might be better served with an overview of whether an area is predominantly boreal or deciduous forest; at present: everything is "North"
+    # RawData_df$REGION <- pbsapply(RawData_df$LATITUDE, FUN = function(x) {
+    #     ifelse(x > 35, "North", "South")
+    # })
 
-    # Range between min and max to get a better understanding of temperature fluctuations
-    RawData_df$range <- RawData_df$max - RawData_df$min
+    # # Range between min and max to get a better understanding of temperature fluctuations
+    # RawData_df$range <- RawData_df$max - RawData_df$min
 
     # Returning data
     return(RawData_df)
@@ -132,7 +132,8 @@ polys <- as.polygons(CERRA_ls[[1]][[1]], dissolve = FALSE)
 
 ##### Mean / SD of ESA AGB and GISCO DEM ------
 print("DEM and AGB data")
-ContiStack_ls <- pblapply(list(DEM = GISCO_DEM_rast, AGB = ESA_agb_rast), FUN = function(x){
+if(!file.exists(file.path(Dir.EmulatorData, "DEM_SD.nc"))){
+    ContiStack_ls <- pblapply(list(DEM = GISCO_DEM_rast, AGB = ESA_agb_rast), FUN = function(x){
     # x <- ESA_agb_rast; x <- GISCO_DEM_rast
     
     # extracting by polygons
@@ -174,9 +175,27 @@ varnames(AGB_stack[[1]]) <- "AGB Mean"
 varnames(AGB_stack[[2]]) <- "AGB SD"
 units(AGB_stack[[1]]) <- units(AGB_stack[[2]]) <- "t/ha"
 
+terra::writeCDF(AGB_stack[[1]], file = file.path(Dir.EmulatorData, "AGB_Mean.nc"), compression = 9)
+terra::writeCDF(AGB_stack[[2]], file = file.path(Dir.EmulatorData, "AGB_SD.nc"), compression = 9)
+terra::writeCDF(DEM_stack[[1]], file = file.path(Dir.EmulatorData, "DEM_Mean.nc"), compression = 9)
+terra::writeCDF(DEM_stack[[2]], file = file.path(Dir.EmulatorData, "DEM_SD.nc"), compression = 9)
+}else{
+    print("-- Already compiled")
+AGB_stack <- list(
+    rast(file.path(Dir.EmulatorData, "AGB_Mean.nc")),
+    rast(file.path(Dir.EmulatorData, "AGB_SD.nc"))
+    )
+
+DEM_stack <- list(
+    rast(file.path(Dir.EmulatorData, "DEM_Mean.nc")),
+    rast(file.path(Dir.EmulatorData, "DEM_SD.nc"))
+    )
+}
+
 ##### Frequency of non-zero AGB values -----
 print("Binarised AGB data")
-BinAGB_ls <- pblapply(1:nlyr(ESA_agb_rast), FUN = function(lyr){
+if(!file.exists(file.path(Dir.EmulatorData, "AGB_Ratio_InNA.nc"))){
+    BinAGB_ls <- pblapply(1:nlyr(ESA_agb_rast), FUN = function(lyr){
     # lyr <- 1
     lyrIter <- ESA_agb_rast[[lyr]]
     ## extract data
@@ -208,71 +227,99 @@ terra::time(AGBBinRatioNonNA_stack) <- terra::time(AGBBinRatio_stack) <- terra::
 varnames(AGBBinRatioNonNA_stack) <- "Non-Zero AGB Fraction ignoring NAs"
 varnames(AGBBinRatio_stack) <- "Non-Zero AGB Fraction counting NAs as Zeroes"
 units(AGBBinRatioNonNA_stack) <- units(AGBBinRatio_stack) <- "%"
+terra::writeCDF(AGBBinRatioNonNA_stack, file = file.path(Dir.EmulatorData, "AGB_Ratio_ExNA.nc"), compression = 9)
+terra::writeCDF(AGBBinRatio_stack, file = file.path(Dir.EmulatorData, "AGB_Ratio_InNA.nc"), compression = 9)
+}else{
+    print("-- Already compiled")
+    AGBBinRatioNonNA_stack <- rast(file.path(Dir.EmulatorData, "AGB_Ratio_ExNA.nc"))
+    AGBBinRatio_stack <- rast(file.path(Dir.EmulatorData, "AGB_Ratio_InNA.nc"))
+}
 
 ##### CORINE Classifications as Frequencies -----
 print("CORINE Land Cover Classifications")
+if(!file.exists(file.path(Dir.EmulatorData, "CORINE_Ratio.nc"))){
 vals <- extract(CORINE_rast, polys)
 colnames(vals) <- c("ID", "CORINE")
 ## extract frequencies
 freq <- table(vals$ID, vals$CORINE, useNA = "always")
-mat <- as.matrix(freq3)
+freq <- freq[-nrow(freq),] # remove final NA row
+mat <- as.matrix(freq)
+matratio <- mat/rowSums(mat)
 # make output raster with one layer per category
-CORINE_stack <- rast(CERRA_ls[[1]][[1]], nlyrs = ncol(mat))
+CORINE_stack <- rast(CERRA_ls[[1]][[1]], nlyrs = ncol(matratio))
 # fill raster stack
-values(CORINE_stack) <- mat
-names(CORINE_stack) <- colnames(mat)
-varnames(CORINE_stack) <- colnames(mat)
-units(CORINE_stack) <- ""
-
-### Stacking -----
-message("Saving Emulator-Ready NetCDFs")
-print("AGB Rasters (4x)")
-terra::writeCDF(AGB_stack[[1]], file = file.path(Dir.EmulatorData, "AGB_Mean.nc"), compression = 9)
-terra::writeCDF(AGB_stack[[2]], file = file.path(Dir.EmulatorData, "AGB_SD.nc"), compression = 9)
-terra::writeCDF(AGBBinRatioNonNA_stack, file = file.path(Dir.EmulatorData, "AGB_Ratio_ExNA.nc"), compression = 9)
-terra::writeCDF(AGBBinRatio_stack, file = file.path(Dir.EmulatorData, "AGB_Ratio_InNA.nc"), compression = 9)
-
-print("DEM Rasters (2x)")
-terra::writeCDF(DEM_stack[[1]], file = file.path(Dir.EmulatorData, "DEM_Mean.nc"), compression = 9)
-terra::writeCDF(DEM_stack[[2]], file = file.path(Dir.EmulatorData, "DEM_SD.nc"), compression = 9)
-
-print("CORINE Raster (1x)")
+values(CORINE_stack) <- matratio
+colnames(matratio)[c(45,46)] <- c("No CORINE Class", "No Data")
+#  [1] "1"               "2"               "3"               "4"              
+#  [5] "5"               "6"               "7"               "8"              
+#  [9] "9"               "10"              "11"              "12"             
+# [13] "13"              "14"              "15"              "16"             
+# [17] "17"              "18"              "19"              "20"             
+# [21] "21"              "22"              "23"              "24"             
+# [25] "25"              "26"              "27"              "28"             
+# [29] "29"              "30"              "31"              "32"             
+# [33] "33"              "34"              "35"              "36"             
+# [37] "37"              "38"              "39"              "40"             
+# [41] "41"              "42"              "43"              "44"             
+# [45] "No CORINE Class" "No Data" 
+names(CORINE_stack) <- colnames(matratio)
+units(CORINE_stack) <- "%"
 terra::writeCDF(CORINE_stack, file = file.path(Dir.EmulatorData, "CORINE_Ratio.nc"), compression = 9)
+}else{
+    print("-- Already compiled")
+    CORINE_stack <- rast(file.path(Dir.EmulatorData, "CORINE_Ratio.nc"))
+}
 
 ### Combining into big data frame -----
-stop("Continue here")
-Extract_ls <- pblapply(1:nlyr(CERRA_mean), FUN = function(Iter) {
+# prepare data frames of non-cerra data
+NonCERRA_ls <- list(
+    DEM_Mean = DEM_stack[[1]],
+    DEM_SD = DEM_stack[[2]],
+    AGB_Mean = AGB_stack[[1]],
+    AGB_SD = AGB_stack[[2]],
+    AGBRatioNonNA = AGBBinRatioNonNA_stack,
+    AGBBinRatio = AGBBinRatioNonNA_stack,
+    CORINERatio = CORINE_stack
+)
+NonCERRA_dfs <- pblapply(NonCERRA_ls, FUN = function(x){
+    # print(sources(x))
+    as.data.frame(x, cells = TRUE, time = TRUE, na.rm = FALSE, xy = TRUE)
+})
+colnames(NonCERRA_dfs$CORINERatio)[-1:-3] <- c(paste0("CORINE_", c(1:44, 48)), "CORINE_NoData")
+
+# loop over days in CERRA data
+Extract_ls <- pblapply(1:nlyr(CERRA_ls[[1]]), FUN = function(Iter) {
     # Iter = 1
     # print(Iter)
     ### obtain relevant layers
-    TAVG_Iter <- CERRA_mean[[Iter]]
-    TMIN_Iter <- CERRA_min[[Iter]]
-    TMAX_Iter <- CERRA_max[[Iter]]
+    CERRA_dfs <- lapply(CERRA_ls, FUN = function(x){
+        as.data.frame(x[[Iter]], cells = TRUE, time = TRUE, na.rm = FALSE, xy = TRUE)
+    })
 
-    ### make output data frame
-    Base_df <- as.data.frame(TAVG_Iter, cells = TRUE, time = TRUE, na.rm = FALSE, xy = TRUE)
-    colnames(Base_df) <- c("CELL", "LONGITUDE", "LATITUDE", "mean")
-    Base_df$YEAR_MONTH <- substr(time(TAVG_Iter), 1, 7)
-    Base_df$DAY <- substr(time(TAVG_Iter), 9, 10)
-    Base_df <- Base_df[, c(1:3, 5, 4)]
-    Base_df$min <- as.data.frame(TMIN_Iter, na.rm = FALSE)[, 1]
-    Base_df$max <- as.data.frame(TMAX_Iter, na.rm = FALSE)[, 1]
-    Base_df$ELEVATION <- as.data.frame(GISCO_DEM_rast, na.rm = FALSE)[, 1]
+    ### merge data frames
+    Base_df <- cbind(CERRA_dfs[[1]][,-4], do.call(cbind, lapply(CERRA_dfs, FUN = function(x){x[,4]})))
+    colnames(Base_df) <- gsub(pattern = ".nc", replacement = "", colnames(Base_df))
+    colnames(Base_df) <- gsub(pattern = " ", replacement = "_", colnames(Base_df))
+    colnames(Base_df)[1:3] <- c("CELL", "LONGITUDE", "LATITUDE")
 
-    ### add AGB data
-    ESALyr <- which(substr(time(ESA_agb_rast), 1, 4) == substr(Base_df$YEAR_MONTH[1], 1, 4))
-    if (length(ESALyr) == 0) {
-        ESAVal <- NA
-    } else {
-        # Convert the LAT and LON to a matrix of coordinates
-        coords <- as.matrix(Base_df[, c("LONGITUDE", "LATITUDE")]) # order: lon, lat
-        # Extract raster values for those coordinates
-        ESAVal <- extract(
-            ESA_agb_rast[[ESALyr]],
-            coords
-        )[, 1]
-    }
-    Base_df$AGB_ESA <- ESAVal
+    ## assign Time components
+    Base_df$YEAR_MONTH <- substr(time(CERRA_ls[[1]][[Iter]]), 1, 7)
+    Base_df$DAY <- substr(time(CERRA_ls[[1]][[Iter]]), 9, 10)
+
+    ## add non-cerra data, only AGB data is non-static
+    ### static data
+    Base_df$ELEVATION_mean <- NonCERRA_dfs$DEM_Mean[,4]
+    Base_df$ELEVATION_sd <- NonCERRA_dfs$DEM_sd[,4]
+    Base_df <- cbind(Base_df, NonCERRA_dfs$CORINERatio[, -1:-3])
+
+    ### non-static data
+    AGBCol <- which(substr(colnames(NonCERRA_dfs$AGB_Mean), 1, 4) == substr(Base_df$YEAR_MONTH[1], 1, 4))
+    bind_df <- do.call(cbind, lapply(NonCERRA_dfs[grep(names(NonCERRA_dfs), pattern = "AGB")], FUN = function(x){
+        x[,AGBCol]
+    }))
+    Base_df <- cbind(Base_df, bind_df)
+
+    ## make output data frame
     Base_df
 })
 
@@ -283,10 +330,11 @@ Data_5km_df <- do.call(rbind, Extract_ls)
 Data_5km_df <- EmulatorReadying(Data_5km_df)
 Data_5km_df <- na.omit(Data_5km_df)
 
-write.csv(Data_5km_df, file.path(Dir.EmulatorData, "Data_5km_df.csv"))
+# write.csv(Data_5km_df, file.path(Dir.EmulatorData, "Data_5km_df.csv"))
 saveRDS(Data_5km_df, file.path(Dir.EmulatorData, "Data_5km_df.rds"))
 
 ### Paralel Processing Preparations ---------------------------------------
+stop("here")
 ## Readying for Moving Window
 Data_5km_df$AGB_ESA <- unlist(Data_5km_df$AGB_ESA)
 Data_5km_df$YEAR <- substr(Data_5km_df$YEAR_MONTH, 1, 4)
