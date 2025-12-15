@@ -53,7 +53,7 @@ if (!is.null(FCheck)) {
     URLS <- paste0("https://dap.ceda.ac.uk/neodc/esacci/biomass/data/agb/maps/v6.0/netcdf/ESACCI-BIOMASS-L4-AGB-MERGED-100m-", 2015:2022, "-fv6.0.nc?download=1")
     FNames <- file.path(Dir.ESA, paste0("ESA_TEMP", 2015:2022, ".nc"))
 
-    FilestoLoad <- ClimHub:::Helper_DirectDownload(url = URLS, fileName = FNames, cores = 12)
+    FilestoLoad <- ClimHub:::Helper_DirectDownload(url = URLS[1], fileName = FNames[1], cores = 1)
     ESA_rast <- ClimHub:::Helper_LoadFiles(FilestoLoad)
 
     ### Cropping --------------------------------------------------------------
