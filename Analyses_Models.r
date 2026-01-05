@@ -50,14 +50,15 @@ LocSpec_ls <- pblapply(
     Fs,
     # cl = 30,
     FUN = function(FIter) {
-        # FIter <- Fs[1]
+        # FIter <- "/storage/no-backup-nac/PATHFINDER/Manuscript/EmulatorData/CERRA/CERRA_10113.rds" # Fs[1]
         NameIter <- gsub(pattern = "_df", replacement = "", tools::file_path_sans_ext(basename(FIter)))
         FNAME <- file.path(Dir.ExportsCERRA, paste0(NameIter, ".RData"))
+        print(NameIter)
         if (file.exists(FNAME)) {
-            print("Already Compiled")
+            # print("Already Compiled")
             load(FNAME)
         } else {
-            print("Compiling")
+            # print("Compiling")
             ## loading data -----------------
             ModelData_df <- readRDS(FIter) # ModelData_ls[[NameIter]]
             ModelData_df$YEAR <- substr(ModelData_df$YEAR_MONTH, 1, 4)
@@ -82,7 +83,7 @@ LocSpec_ls <- pblapply(
                 # ResponseVar <- Responses[1]
                 # print(ResponseVar)
                 ### Binarised AGB ------
-                if (length(unique(ModelData_df$AGB_Binary)) != 2) {
+                if (length(na.omit(unique(ModelData_df$AGB_Binary))) != 2) {
                     BinMod <- NULL
                 } else {
                     BinMod <- lm(as.formula(paste0(ResponseVar, " ~ AGB_Binary*SEASON + Surface_roughness_mean*Wind_speed_mean")), data = ModelData_df)
@@ -122,6 +123,6 @@ LocSpec_ls <- pblapply(
             ## saving results -----------------
             save(models_ls, file = FNAME)
         }
-        return(models_ls)
+        # return(models_ls)
     }
 )
