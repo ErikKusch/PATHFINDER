@@ -20,7 +20,8 @@ install.load.package <- function(x) {
 ### CRAN PACKAGES ----
 package_vec <- c(
     "stringr", # for string padding
-    "pbapply" # for progress bars with estimator
+    "pbapply", # for progress bars with estimator
+    "mgcv"
 )
 sapply(package_vec, install.load.package)
 
@@ -33,6 +34,10 @@ Dir.Exports <- file.path(Dir.Base, "Exports")
 if (!dir.exists(Dir.Exports)) {
     dir.create(Dir.Exports)
 }
+Dir.ExportsCERRA <- file.path(Dir.Exports, "LocDFs")
+if (!dir.exists(Dir.ExportsCERRA)) {
+    dir.create(Dir.ExportsCERRA)
+}
 
 # DATA ====================================================================
 message("####### Registering Data Files")
@@ -42,34 +47,30 @@ Fs <- list.files(Dir.EmulatorDataCERRA, pattern = ".rds", full.names = TRUE)
 message("####### Carrying out Analyses")
 ## response variables
 Responses <- c(
-                "Temperature_mean", "Temperature_max", "Temperature_min", "Temperature_range",
-                "Skin_temperature_mean", "Skin_temperature_max", "Skin_temperature_min", "Skin_temperature_range",
-                "SkinVsTemperature_diff"
+                "Temperature_mean", "SkinVsTemperature_diff" #  "Temperature_max", "Temperature_min", "Temperature_range", "Skin_temperature_mean", "Skin_temperature_max", "Skin_temperature_min", "Skin_temperature_range",
             )
 
 ## Actual Analyses ---------------------------------------------------------
 message("+++ Location-Specific Models +++")
 
 model_summary <- function(model) {
-                    if (is.null(model)) {
-                        return(NULL)
-                    }
-                    list(
-                        coefficients = coef(model),
-                        summary = summary(model)
-                    )
-                }
+    if (is.null(model)) return(NULL)
+
+    list(
+        coefficients = summary(model)$p.table,
+        # smooths = summary(model)$s.table,
+        AIC = AIC(model),
+        BIC = BIC(model),
+        r_squared =  summary(model)$r.sq
+    )
+}
 
 get_coef_df <- function(mod_obj) {
                 if (is.null(mod_obj)) {
                     return(NULL)
                 }
-                # support both stored summary object and raw lm
-                sm <- if (inherits(mod_obj, "lm")) summary(mod_obj) else mod_obj$summary
-                if (is.null(sm) || is.null(sm$coefficients)) {
-                    return(NULL)
-                }
-                coefs <- as.data.frame(sm$coefficients, stringsAsFactors = FALSE)
+
+                coefs <- as.data.frame(mod_obj$coefficients, stringsAsFactors = FALSE)
                 df <- data.frame(
                     coefficient = rownames(coefs),
                     estimate = coefs$Estimate,
@@ -78,7 +79,9 @@ get_coef_df <- function(mod_obj) {
                     stringsAsFactors = FALSE
                 )
                 # Add R-squared as a column
-                df$r.squared <- sm$r.squared
+                df$r.squared <- mod_obj$r_squared
+                df$AIC <- mod_obj$AIC
+                df$BIC <- mod_obj$BIC
                 df
             }
 
@@ -88,68 +91,95 @@ LocSpec_ls <- pblapply(
     FUN = function(FIter) {
         # FIter <- "/storage/no-backup-nac/PATHFINDER/Manuscript/EmulatorData/CERRA/CERRA_10113.rds" # Fs[1]
         NameIter <- gsub(pattern = "_df", replacement = "", tools::file_path_sans_ext(basename(FIter)))
-        FNAME <- file.path(Dir.ExportsCERRA, paste0(NameIter, ".RData"))
-        RDSNAME <- file.path(Dir.Exports, gsub(pattern = "RData", replacement = "rds", basename(FNAME)))
-        CELL <- gsub(pattern = ".RData", replacement = "", gsub(pattern = "CERRA_", replacement = "", basename(FNAME)))
+        FNAME <- file.path(Dir.ExportsCERRA, paste0(NameIter, ".rds"))
+        # RDSNAME <- file.path(Dir.Exports, gsub(pattern = "RData", replacement = "rds", basename(FNAME)))
+        CELL <- gsub(pattern = ".rds", replacement = "", gsub(pattern = "CERRA_", replacement = "", basename(FNAME)))
         # print(NameIter)
-        if (file.exists(RDSNAME)) {
+        if (file.exists(FNAME)) {
             # print("Already Compiled")
-            df <- readRDS(RDSNAME)
+            df <- readRDS(FNAME)
         } else {
-            print(NameIter)
+            # print(NameIter)
             # loading data -----------------
             basedata <- ModelData_df <- readRDS(FIter) # ModelData_ls[[NameIter]]
             ModelData_df$YEAR <- substr(ModelData_df$YEAR_MONTH, 1, 4)
             ModelData_df$MONTH <- substr(ModelData_df$YEAR_MONTH, 6, 7)
             colnames(ModelData_df) <- sub("^[0-9]+m_", "", colnames(ModelData_df)) # remove leading numbers
-            ModelData_df$`Temperature_range` <- ModelData_df[, "Temperature_max"] - ModelData_df[, "Temperature_min"]
-            ModelData_df$Skin_temperature_range <- ModelData_df[, "Skin_temperature_max"] - ModelData_df[, "Skin_temperature_min"]
             ModelData_df$SkinVsTemperature_diff <- ModelData_df[, "Skin_temperature_mean"] - ModelData_df[, "Temperature_mean"]
-            ModelData_df$AGB_Binary <- ifelse(ModelData_df$AGB_Mean > 0, "Forest", "Non-Forest")
-            ModelData_df$CORINE_FF <- ModelData_df$CORINE_23 + ModelData_df$CORINE_24 + ModelData_df$CORINE_25
 
             ## models -----------------
             ## actual models
             models_ls <- lapply(Responses, FUN = function(ResponseVar) {
                 # ResponseVar <- Responses[1]
                 # print(ResponseVar)
-                ### Binarised AGB ------
-                if (length(na.omit(unique(ModelData_df$AGB_Binary))) != 2) {
-                    BinMod <- NULL
-                } else {
-                    BinMod <- lm(as.formula(paste0(ResponseVar, " ~ AGB_Binary*SEASON + Surface_roughness_mean*Wind_speed_mean")), data = ModelData_df)
-                }
+                Seasons <- c("Winter" = "DJF", "Summer" = "JJA")
+                seasons_ls <- lapply(Seasons, FUN = function(Season){
+                    # Season <- Seasons[1]
+                    # extracting relevant data for season
+                    iter_df <- ModelData_df[ModelData_df$SEASON == Season, ]
+                    # Create a date column (assuming YEAR/MONTH/DAY are in standard formats)
+                    iter_df$date <- as.Date(paste(iter_df$YEAR, iter_df$MONTH, iter_df$DAY, sep = "-"))
+                    # Sort data by CELL and date (essential for time-series correlation)
+                    iter_df <- iter_df[order(iter_df$CELL, iter_df$date), ]
+                    colnames(iter_df)[which(colnames(iter_df) == "AGBRatioNonNA")] <- "ForestFraction"
 
-                ### Continuous AGB ------
-                ContMod <- lm(as.formula(paste0(ResponseVar, " ~ AGB_Mean*SEASON + Surface_roughness_mean*Wind_speed_mean")), data = ModelData_df)
+                    iter_df_clean <- na.omit(iter_df[, c(ResponseVar, "AGB_Mean", "ForestFraction", "Surface_roughness_mean", "Wind_speed_mean", "date", "CELL")])
 
-                ### AGB Forest Fraction ------
-                FracMod_AGB_NonNA <- lm(as.formula(paste0(ResponseVar, " ~ AGBRatioNonNA*SEASON + Surface_roughness_mean*Wind_speed_mean")), data = ModelData_df)
-                FracMod_AGB <- lm(as.formula(paste0(ResponseVar, " ~ AGBBinRatio*SEASON + Surface_roughness_mean*Wind_speed_mean")), data = ModelData_df)
+                    ### AGB Forest Fraction ------
+                    FracMod_AGB_ForestOnly <- bam(
+                        as.formula(paste0(ResponseVar, " ~ ForestFraction")),
+                        data = iter_df_clean,
+                        correlation = corExp(form = ~ date | CELL) #corAR1(form = ~ date | CELL)  # AR(1) per spatial group
+                    )
 
-                ### Corine Forest Fraction ------
-                FracMod_CORINE <- lm(as.formula(paste0(ResponseVar, " ~ CORINE_FF*SEASON + Surface_roughness_mean*Wind_speed_mean")), data = ModelData_df)
+                    FracMod_AGB_Full <- bam(
+                        as.formula(paste0(ResponseVar, " ~ ForestFraction + Surface_roughness_mean * Wind_speed_mean")),
+                        data = iter_df_clean,
+                        correlation = corExp(form = ~ date | CELL) #corAR1(form = ~ date | CELL)  # AR(1) per spatial group
+                    )
 
-                ## building list -----------------
-                models_ls <- list(
-                    BinMod = model_summary(BinMod),
-                    ContMod = model_summary(ContMod),
-                    FracMod_AGB_NonNA = model_summary(FracMod_AGB_NonNA),
-                    FracMod_AGB = model_summary(FracMod_AGB),
-                    FracMod_CORINE = model_summary(FracMod_CORINE)
-                )
-                models_ls
+                    ### Continuous AGB ------
+                    ContMod <- bam(
+                        as.formula(paste0(ResponseVar, " ~AGB_Mean + Surface_roughness_mean * Wind_speed_mean")),
+                        data = iter_df_clean,
+                        correlation = corExp(form = ~ date | CELL) 
+                        )
+
+                    ### Combined Model ------
+                    CombMod <- bam(
+                        as.formula(paste0(ResponseVar, " ~ AGB_Mean * ForestFraction + Surface_roughness_mean * Wind_speed_mean")),
+                        data = iter_df_clean,
+                        correlation = corExp(form = ~ date | CELL)
+                        )
+
+                    ## building list -----------------
+                    models_ls <- list(
+                        FracMod_ForestOnly = model_summary(FracMod_AGB_ForestOnly),
+                        FracMod_Full = model_summary(FracMod_AGB_Full),
+                        ContMod = model_summary(ContMod),
+                        CombMod = model_summary(CombMod)
+                    )
+                    models_ls
+                })
+                names(seasons_ls) <- names(Seasons)
+                seasons_ls
             })
             names(models_ls) <- Responses
 
             df <- lapply(Responses, FUN = function(Response) {
                 # print(Response)
                 # Response <- Responses[1]
-                models_df <- lapply(names(models_ls[[Response]]), FUN = function(model_name) {
-                    # model_name <- "ContMod"
-                    df <- get_coef_df(models_ls[[Response]][[model_name]])
-                    df$ModelType <- model_name
-                    df
+                models_df <- lapply(names(models_ls[[Response]]), FUN = function(season_name) {
+                    # season_name <- "Winter"
+                    seasons_df <- lapply(names(models_ls[[Response]][[season_name]]), FUN = function(model_name){
+                        # model_name <- "ContMod"
+                        df <- get_coef_df(models_ls[[Response]][[season_name]][[model_name]])
+                        df$ModelType <- model_name
+                        df
+                    })
+                    seasons_df <- do.call(rbind, seasons_df)
+                    seasons_df$Season <- season_name
+                    seasons_df
                 })
                 df <- do.call(rbind, models_df[which(unlist(lapply(models_df, class)) == "data.frame")])
                 df$Response <- Response
@@ -159,13 +189,14 @@ LocSpec_ls <- pblapply(
             df$CELL <- CELL
             df$LONGITUDE <- basedata[which(basedata$CELL == CELL)[1], "LONGITUDE"]
             df$LATITUDE <- basedata[which(basedata$CELL == CELL)[1], "LATITUDE"]
-            saveRDS(df, file = RDSNAME)
+            saveRDS(df, file = FNAME)
         }
         return(df)
     }
 )
 ModelResults_df <- do.call(rbind, LocSpec_ls)
 dim(ModelResults_df)
+head(ModelResults_df)
 saveRDS(ModelResults_df, file = file.path(Dir.Exports, "CERRA_LocationSpecificModelResults_df.rds"))
-RMFiles <- list.files(Dir.Exports, pattern = ".rds", full.names = TRUE)
-RMFiles <- RMFiles[-grep(RMFiles, pattern = "CERRA_LocationSpecificModelResults_df.rds")]
+# RMFiles <- list.files(Dir.Exports, pattern = ".rds", full.names = TRUE)
+# RMFiles <- RMFiles[-grep(RMFiles, pattern = "CERRA_LocationSpecificModelResults_df.rds")]
