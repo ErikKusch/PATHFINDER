@@ -72,9 +72,9 @@ Responses <- unique(Data_df$Response)
 ModelTypes <- unique(Data_df$ModelType)
 SeasonTypes <- unique(Data_df$Season)
 plot_labs <- list(
-            Summer = label_row("(A) Summer Seasons (JJA)"),
-            Winter = label_row("(B) Winter Seasons (DJF)")
-        )
+    Summer = label_row("(A) Summer Seasons (JJA)"),
+    Winter = label_row("(B) Winter Seasons (DJF)")
+)
 
 ## Individual Models ======================================================
 Res_ls <- lapply(Responses, function(Response) {
@@ -85,7 +85,7 @@ Res_ls <- lapply(Responses, function(Response) {
         dir.create(Dir.Response)
     }
     mods_ls <- lapply(ModelTypes, function(ModelType) {
-        # ModelType <- ModelTypes[2]
+        # ModelType <- ModelTypes[1]
         # print(ModelType)
         Dir.ModelType <- file.path(Dir.Response, ModelType)
         if (!dir.exists(Dir.ModelType)) {
@@ -103,13 +103,16 @@ Res_ls <- lapply(Responses, function(Response) {
             # coefficient <- "ForestFraction"
             print(coefficient)
             seasons_ls <- lapply(SeasonTypes, FUN = function(SeasonType) {
-                # SeasonType <- "Summer"
+                # SeasonType <- "Winter"
                 message(SeasonType)
                 ggplot_df <- plot_df[plot_df$coefficient == coefficient & plot_df$Season == SeasonType, ]
 
+                # set p-values that are NA to 1
+                ggplot_df$p.value[is.na(ggplot_df$p.value)] <- 1
+
                 # remove crazy extreme estimates
                 ggplot_df[which(ggplot_df$estimate > quantile(ggplot_df$estimate, 0.99, na.rm = TRUE) |
-                    ggplot_df$estimate < quantile(ggplot_df$estimate, 0.01, na.rm = TRUE)), c("estimate", "p.value", "r.squared", "AIC", "BIC")] <- NA
+                    ggplot_df$estimate < quantile(ggplot_df$estimate, 0.01, na.rm = TRUE)), c("estimate")] <- NA
 
                 ## plot of estimates
                 Estimate_gg <- Panelplot(
@@ -122,7 +125,7 @@ Res_ls <- lapply(Responses, function(Response) {
 
                 # plot of only significant estimates
                 ggplot2_df <- ggplot_df
-                ggplot2_df[which(ggplot2_df$p.value >= 0.05), c("estimate", "p.value", "r.squared", "AIC", "BIC")] <- NA
+                ggplot2_df[which(ggplot2_df$p.value >= 0.05), c("estimate")] <- NA
 
                 Estimate2_gg <- Panelplot(
                     data = ggplot2_df,
@@ -193,11 +196,11 @@ Res_ls <- lapply(Responses, function(Response) {
                 scale_fill_manual(values = c("Winter" = "#003d46", "Summer" = "#ac4d20")) +
                 coord_cartesian(xlim = xlim_vals) +
                 labs(y = "", x = "Coefficient Estimate") +
-                theme(axis.title.y = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()) + 
+                theme(axis.title.y = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
                 theme(legend.position = "bottom", legend.title = element_text(hjust = 0.5)) +
-                annotate("text", x = xlim_vals[1]*0.9, y = Inf, label = paste("Paired t-Test p-value =", format.pval(test_res$p, digits = 3)), hjust = 0, vjust = 5, size = 4)
+                annotate("text", x = xlim_vals[1] * 0.9, y = Inf, label = paste("Paired t-Test p-value =", format.pval(test_res$p, digits = 3)), hjust = 0, vjust = 5, size = 4)
 
-            if (coefficient == tail(coefficients, 1)) {
+            if (coefficient == tail(coefficients, 1) & !file.exists(ModFile)) {
                 ggsave(
                     ModFile,
                     plot_grid(seasons_ls$Summer$R2, seasons_ls$Winter$R2, ncol = 2),
@@ -208,11 +211,13 @@ Res_ls <- lapply(Responses, function(Response) {
             coefficient <- gsub(pattern = ":", replacement = "_X_", coefficient)
 
             gg_file <- file.path(Dir.ModelType, paste0(coefficient, ".png"))
-            ggsave(
-                gg_file,
-                plot_grid(seasons_ls$Summer$estimate, seasons_ls$Winter$estimate, ncol = 2),
-                width = 6 * 2, height = 9.8 * 2
-            )
+            if (!file.exists(gg_file)) {
+                ggsave(
+                    gg_file,
+                    plot_grid(seasons_ls$Summer$estimate, seasons_ls$Winter$estimate, ncol = 2),
+                    width = 6 * 2, height = 9.8 * 2
+                )
+            }
 
             # return only the data
             list(tTest = TestComp_gg, data = rbind(seasons_ls$Winter$data, seasons_ls$Summer$data))
@@ -222,7 +227,7 @@ Res_ls <- lapply(Responses, function(Response) {
 
         spacers_ls <- lapply(names(plots_ls), label_row)
 
-        combined_ls <- unlist(lapply(1:length(plots_ls), function(i) list(spacers_ls[[i]], plots_ls[[i]]+theme(legend.position = "none"))))
+        combined_ls <- unlist(lapply(1:length(plots_ls), function(i) list(spacers_ls[[i]], plots_ls[[i]] + theme(legend.position = "none"))))
 
         legend_gg <- get_legend(plots_ls[[1]])
         SeasonComp_gg <- plot_grid(
@@ -231,8 +236,10 @@ Res_ls <- lapply(Responses, function(Response) {
             ncol = 1,
             rel_heights = c(1, 0.1)
         )
-        ggsave(TFile, SeasonComp_gg, width = 10, height = 3*length(plots_ls))
-        
+        if (!file.exists(TFile)) {
+            ggsave(TFile, SeasonComp_gg, width = 10, height = 3 * length(plots_ls))
+        }
+
         data_ls <- lapply(coefs_ls, "[[", "data")
         data_ls
     })
@@ -243,32 +250,39 @@ names(Res_ls) <- Responses
 
 
 ## Model Comparisons ======================================================
-lapply(Responses, FUN = function(Response){
+lapply(Responses, FUN = function(Response) {
     # Response <- Responses[2]
     Dir.Response <- file.path(Dir.Exports, Response)
     BestModF <- file.path(Dir.Response, "BestModel.png")
     BICDiffsF <- file.path(Dir.Response, "BICDifferences.png")
 
-    BIC_ls <- lapply(ModelTypes, FUN = function(ModelType){
-        BIC_df <- Res_ls[[Response]][[ModelType]][["(Intercept)"]][,c("LONGITUDE", "LATITUDE", "Season", "BIC")]
+    BIC_ls <- lapply(ModelTypes, FUN = function(ModelType) {
+        BIC_df <- Res_ls[[Response]][[ModelType]][["(Intercept)"]][, c("LONGITUDE", "LATITUDE", "Season", "BIC")]
         colnames(BIC_df)[4] <- ModelType
         BIC_df
     })
     BIC_df <- BIC_ls %>% reduce(left_join, by = c("LONGITUDE", "LATITUDE", "Season"))
     colnames(BIC_df)[-1:-3] <- c("~ ForestFraction", "~ ForestFraction + Roughness * Wind", "~ AGB + Roughness * Wind", "~ ForestFraction * AGB + Roughness * Wind")
-    BestMod <- apply(BIC_df[,-1:-3], 1, function(x) if(length(which.min(x))==0) {NA} else {which.min(x)})
-    BIC_df$BestModNoNA <- BIC_df$BestMod <- colnames(BIC_df)[-1:-3][BestMod]
-    BIC_df$BestModNoNA[NARows] <- NA
+    BestMod <- apply(BIC_df[, -1:-3], 1, function(x) {
+        if (length(which.min(x)) == 0) {
+            NA
+        } else {
+            which.min(x)
+        }
+    })
+    BIC_df$BestMod <- colnames(BIC_df)[-1:-3][BestMod]
+    # BIC_df$BestModNoNA <- BIC_df$BestMod
+    # BIC_df$BestModNoNA[NARows] <- NA
     # head(BIC_df, 11)
 
-    seasons_ls <- lapply(names(plot_labs), FUN = function(Season){
+    seasons_ls <- lapply(names(plot_labs), FUN = function(Season) {
         BIC_df <- BIC_df[BIC_df$Season == Season, ]
 
         ## BIC Differences
         BIC_df$Comb_Vs_Frac <- BIC_df[, "~ ForestFraction * AGB + Roughness * Wind"] - BIC_df[, "~ ForestFraction + Roughness * Wind"]
         BIC_df$Comb_Vs_Cont <- BIC_df[, "~ ForestFraction * AGB + Roughness * Wind"] - BIC_df[, "~ AGB + Roughness * Wind"]
         BIC_df$Cont_Vs_Frac <- BIC_df[, "~ AGB + Roughness * Wind"] - BIC_df[, "~ ForestFraction + Roughness * Wind"]
-        Comps_ls <- lapply(c("Comb_Vs_Frac", "Comb_Vs_Cont", "Cont_Vs_Frac"), FUN = function(Comparison){
+        Comps_ls <- lapply(c("Comb_Vs_Frac", "Comb_Vs_Cont", "Cont_Vs_Frac"), FUN = function(Comparison) {
             # print(Comparison)
             Iter_df <- BIC_df
             colnames(Iter_df)[which(colnames(Iter_df) == Comparison)] <- "estimate"
@@ -284,41 +298,43 @@ lapply(Responses, FUN = function(Response){
             theme_bw() +
             theme(legend.position = "bottom", legend.title = element_text(hjust = 0.5))
 
-            ### Pie chart
-            df <- as.data.frame(table(BIC_df$BestMod, useNA = "ifany"))
-            colnames(df) <- c("Model", "Count")
-            df <- df %>%
-                mutate(Percent = Count / sum(Count) * 100) %>%
-                    arrange(desc(Model)) %>%
-                        mutate(ypos = cumsum(Count) - 0.5 * Count)
+        ### Pie chart
+        df <- as.data.frame(table(BIC_df$BestMod, useNA = "ifany"))
+        colnames(df) <- c("Model", "Count")
+        df <- df %>%
+            mutate(Percent = Count / sum(Count) * 100) %>%
+            arrange(desc(Model)) %>%
+            mutate(ypos = cumsum(Count) - 0.5 * Count)
 
-            Pie_gg <- ggplot(df, aes(x = "", y = Count, fill = Model)) +
-                geom_bar(stat = "identity", width = 1) +
-                coord_polar(theta = "y") +
-                scale_fill_viridis_d(na.value = "darkgrey") +
-                theme_void() +
-                geom_text(
-                    aes(
-                        x = 2, y = ypos,
-                        label = paste0(round(Percent, 1), "%")
-                        ),
-                        size = 3
-                    ) +
-                labs(fill = "Model with Lowest BIC") + theme(legend.position = "none")
+        Pie_gg <- ggplot(df, aes(x = "", y = Count, fill = Model)) +
+            geom_bar(stat = "identity", width = 1) +
+            coord_polar(theta = "y") +
+            scale_fill_viridis_d(na.value = "darkgrey") +
+            theme_void() +
+            geom_text(
+                aes(
+                    x = 2, y = ypos,
+                    label = paste0(round(Percent, 1), "%")
+                ),
+                size = 3
+            ) +
+            labs(fill = "Model with Lowest BIC") +
+            theme(legend.position = "none")
 
-            ## Combining plots
-            final_plot <- ggdraw(BestMod_gg+theme(legend.position = "none")) +
-                draw_plot(Pie_gg, x = 0.2, y = 0.73, width = 0.25, height = 0.25)
+        ## Combining plots
+        final_plot <- ggdraw(BestMod_gg + theme(legend.position = "none")) +
+            draw_plot(Pie_gg, x = 0.2, y = 0.73, width = 0.25, height = 0.25)
 
-            ## return objects for fusing
-            list(Plot = plot_grid(
+        ## return objects for fusing
+        list(
+            Plot = plot_grid(
                 plot_grid(plot_labs[[Season]]),
                 final_plot,
                 ncol = 1,
                 rel_heights = c(0.05, 1)
-                ), 
-                legend = get_legend(BestMod_gg),
-                BICDiffs = plot_grid(
+            ),
+            legend = get_legend(BestMod_gg),
+            BICDiffs = plot_grid(
                 label_row("I - Combined - Fraction Model"),
                 Comps_ls[[1]],
                 label_row("II - Combined - Continuous Model"),
@@ -327,8 +343,8 @@ lapply(Responses, FUN = function(Response){
                 Comps_ls[[3]],
                 ncol = 1,
                 rel_heights = rep(c(0.05, 1), 3)
-                )
-                )
+            )
+        )
     })
 
     ## Best Model Plot
@@ -341,19 +357,20 @@ lapply(Responses, FUN = function(Response){
     ggsave(BestModF, Best_plot, width = 12, height = 6)
 
     ## BIC Difference Plot
-    BICDiffs_plot <-plot_grid(
-            plot_grid(
-                plot_grid(plot_labs[[1]]),
-                seasons_ls[[1]]$BICDiffs,
-                ncol = 1,
-                rel_heights = c(0.05, 1)
-            ), 
-            plot_grid(
-                plot_grid(plot_labs[[2]]),
-                seasons_ls[[2]]$BICDiffs,
-                ncol = 1,
-                rel_heights = c(0.05, 1)
-            ),
-            ncol = 2)
+    BICDiffs_plot <- plot_grid(
+        plot_grid(
+            plot_grid(plot_labs[[1]]),
+            seasons_ls[[1]]$BICDiffs,
+            ncol = 1,
+            rel_heights = c(0.05, 1)
+        ),
+        plot_grid(
+            plot_grid(plot_labs[[2]]),
+            seasons_ls[[2]]$BICDiffs,
+            ncol = 1,
+            rel_heights = c(0.05, 1)
+        ),
+        ncol = 2
+    )
     ggsave(BICDiffsF, BICDiffs_plot, width = 6 * 2, height = 9.8 * 2)
 })
